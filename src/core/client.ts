@@ -4,7 +4,7 @@ import type {
   ChatRequest,
   ChatResponse,
 } from "../infra/types.js";
-import { MODEL_ENDPOINT_MAP } from "../infra/types.js";
+import { MODEL_ENDPOINT_MAP, MODEL_DISPLAY_LABEL_MAP } from "../infra/types.js";
 import { captureCredentials } from "./auth-capture.js";
 
 const JH_API_BASE = "https://chat.ai.jh.edu/api";
@@ -104,7 +104,7 @@ async function sendChatRequestInner(
     resendFiles: true,
     greeting: JH_DEFAULT_GREETING,
     key: "never",
-    modelDisplayLabel: "Claude",
+    modelDisplayLabel: MODEL_DISPLAY_LABEL_MAP[request.model] ?? endpoint,
     isTemporary: true,
     isRegenerate: false,
     isContinued: false,

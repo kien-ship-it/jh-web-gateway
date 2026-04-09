@@ -15,7 +15,7 @@ const JHU_LOGO = `
      ██║   ██║██╔══██║   ██║   ██╔══╝  ██║███╗██║██╔══██║  ╚██╔╝
      ╚██████╔╝██║  ██║   ██║   ███████╗╚███╔███╔╝██║  ██║   ██║
       ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝
-`.trimStart();
+`.replace(/^\n/, '');
 
 const ANIMATION_DURATION_MS = 2000;
 
@@ -72,12 +72,18 @@ export function SplashScreen({ onComplete }: SplashScreenProps): React.ReactElem
   const displayedLogo = JHU_LOGO.slice(0, revealedCount);
 
   return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" width="100%" height="100%">
+    <Box flexDirection="column" alignItems="flex-start" justifyContent="center" width="100%" height="100%">
+      <Box marginTop={2} />
       <Text color="blue">{displayedLogo}</Text>
       {animationComplete && (
-        <Box marginTop={1}>
-          <Text dimColor>Press any key to continue</Text>
-        </Box>
+        <>
+          <Box marginTop={1}>
+            <Text color="cyan" italic>     Infinite tokens, for school work of course :)))</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Press any key to continue</Text>
+          </Box>
+        </>
       )}
     </Box>
   );

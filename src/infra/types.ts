@@ -186,11 +186,25 @@ export const MODEL_ENDPOINT_MAP: Record<string, string> = {
   "claude-opus-4.5": "AnthropicClaude",
   "claude-sonnet-4.5": "AnthropicClaude",
   "claude-haiku-4.5": "AnthropicClaude",
-  "gpt-4.1": "OpenAI",
-  "o3": "OpenAI",
-  "o3-mini": "OpenAI",
-  "gpt-5": "OpenAI",
-  "gpt-5.1": "OpenAI",
-  "gpt-5.2": "OpenAI",
-  "llama3-3-70b-instruct": "Meta",
+  "gpt-4.1": "AzureOpenAI",
+  "o3": "AzureOpenAI",
+  "o3-mini": "AzureOpenAI",
+  "gpt-5": "AzureOpenAI",
+  "gpt-5.1": "AzureOpenAI",
+  "gpt-5.2": "AzureOpenAI",
+  "llama3-3-70b-instruct": "MetaLlama",
+} as const;
+
+/** Maps model IDs to the display label expected by the JH platform */
+export const MODEL_DISPLAY_LABEL_MAP: Record<string, string> = {
+  "claude-opus-4.5": "Claude",
+  "claude-sonnet-4.5": "Claude",
+  "claude-haiku-4.5": "Claude",
+  "gpt-4.1": "ChatGPT",
+  "o3": "ChatGPT",
+  "o3-mini": "ChatGPT",
+  "gpt-5": "ChatGPT",
+  "gpt-5.1": "ChatGPT",
+  "gpt-5.2": "ChatGPT",
+  "llama3-3-70b-instruct": "MetaLlama",
 } as const;

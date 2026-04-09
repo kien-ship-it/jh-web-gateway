@@ -134,7 +134,7 @@ export async function startServer(
     s.once("error", onError);
   });
 
-  console.log(`JH Web Gateway listening on http://${hostname}:${port}`);
+  console.log(` Gateway listening on http://${hostname}:${port}`);
 
   let shuttingDown = false;
   const DRAIN_TIMEOUT_MS = 10_000;

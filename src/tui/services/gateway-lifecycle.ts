@@ -115,7 +115,7 @@ export async function stopGateway(
   tokenRefresher.stop();
   await serverHandle.close();
 
-  const cdpPort = 9222;
-  const chromeManager = new ChromeManager({ cdpPort });
+  // shutdown only uses the state (browser.close + process.kill) — no manager config needed
+  const chromeManager = new ChromeManager();
   await chromeManager.shutdown(chromeState);
 }

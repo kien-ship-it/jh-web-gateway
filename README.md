@@ -39,6 +39,284 @@ Point any OpenAI-compatible tool at:
 - Base URL: `http://127.0.0.1:8741/v1`
 - API Key: printed at startup as `API Key: jh-local-...`
 
+## Interactive TUI
+
+Run without arguments (or with `tui`) to open the full-screen interactive terminal UI:
+
+```bash
+jh-gateway
+# or
+jh-gateway tui
+```
+
+The TUI guides you through the complete workflow — start the gateway, pick a model, send test messages, and copy connection details — all without leaving the terminal.
+
+---
+
+### Splash Screen
+
+On launch, an animated ASCII banner plays. Press any key to skip it and enter the main menu.
+
+```text
+     ██╗██╗  ██╗    ██╗    ██╗███████╗██████╗
+     ██║██║  ██║    ██║    ██║██╔════╝██╔══██╗
+     ██║███████║    ██║ █╗ ██║█████╗  ██████╔╝
+██   ██║██╔══██║    ██║███╗██║██╔══╝  ██╔══██╗
+╚█████╔╝██║  ██║    ╚███╔███╔╝███████╗██████╔╝
+ ╚════╝ ╚═╝  ╚═╝     ╚══╝╚══╝ ╚══════╝╚═════╝
+
+      ██████╗  █████╗ ████████╗███████╗██╗    ██╗ █████╗ ██╗   ██╗
+     ██╔════╝ ██╔══██╗╚══██╔══╝██╔════╝██║    ██║██╔══██╗╚██╗ ██╔╝
+     ██║  ███╗███████║   ██║   █████╗  ██║ █╗ ██║███████║ ╚████╔╝
+     ██║   ██║██╔══██║   ██║   ██╔══╝  ██║███╗██║██╔══██║  ╚██╔╝
+     ╚██████╔╝██║  ██║   ██║   ███████╗╚███╔███╔╝██║  ██║   ██║
+      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝
+
+      Infinite tokens, for school work of course :)))
+      Press any key to continue
+```
+
+---
+
+### Main Menu
+
+The header shows the gateway status at all times. Use arrow keys to navigate and `Enter` to select.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ jh-gateway                         ● Gateway: stopped       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Main Menu                                                  │
+│                                                             │
+│  > Start Gateway                                            │
+│    Model                                                    │
+│    Chat                                                     │
+│    Server Info                                              │
+│    Settings                                                 │
+│    Quit                                                     │
+│                                                             │
+│  Launch Chrome, authenticate, and start the HTTP server     │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│ [↑↓] Navigate    [Enter] Select    [q/Esc] Quit            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Move between items |
+| `Enter` | Open the highlighted panel |
+| `q` / `Esc` | Quit jh-gateway |
+
+---
+
+### Gateway Panel
+
+Select **Start Gateway** to launch Chrome, authenticate, and start the server. A live phase tracker shows progress:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ jh-gateway                         ● Gateway: starting      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Gateway Control                                            │
+│                                                             │
+│  Starting gateway…                                          │
+│                                                             │
+│  ● Connecting to Chrome                                     │
+│  ◌ Waiting for login          ← active phase               │
+│  ○ Starting server                                          │
+│                                                             │
+│ ╭──────────────────────────────────────────╮               │
+│ │  Please log in via the Chrome window     │               │
+│ ╰──────────────────────────────────────────╯               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Once all phases complete the gateway is live:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ jh-gateway                         ● Gateway: running       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Gateway Control                                            │
+│                                                             │
+│  ● Running    [Enter] Stop                                  │
+│                                                             │
+│  ● Connecting to Chrome                                     │
+│  ● Waiting for login                                        │
+│  ● Starting server                                          │
+│                                                             │
+│  Gateway running on http://127.0.0.1:8741                  │
+│                                                             │
+│  [b/Esc] Back (gateway keeps running)                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Symbol | Meaning |
+|--------|---------|
+| `○` | Pending |
+| `◌` | Active (in progress) |
+| `●` | Done |
+| `✗` | Error |
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Start / Stop the gateway |
+| `b` / `Esc` | Back to menu (gateway continues running in the background) |
+
+---
+
+### Model Selector
+
+Choose the AI model for all requests. The currently active model is marked with a filled circle (`●`).
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ jh-gateway                         ● Gateway: running       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Select Model                                               │
+│                                                             │
+│  > ● claude-opus-4.5          ← active model               │
+│    ○ claude-sonnet-4.5                                      │
+│    ○ claude-haiku-4.5                                       │
+│    ○ gpt-4.1                                                │
+│    ○ gpt-5                                                  │
+│    ○ gpt-5.1                                                │
+│    ○ o3                                                     │
+│    ○ o3-mini                                                │
+│    ○ llama3-3-70b-instruct                                  │
+│                                                             │
+│  [↑↓] Navigate  [Enter] Select  [b/Esc] Back               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The selection is saved to `~/.jh-gateway/config.json` as `defaultModel` immediately on press.
+
+---
+
+### Chat Panel
+
+Send a quick test message from inside the TUI — no external tool required. The panel shows the last exchange and streams a response from the running gateway.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ jh-gateway                         ● Gateway: running       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Chat  Model: claude-opus-4.5                               │
+│                                                             │
+│  You: Explain quicksort                                     │
+│                                                             │
+│  Assistant: Quicksort is a divide-and-conquer algorithm…   │
+│                                                             │
+│ ╭─────────────────────────────────────────────────────╮    │
+│ │  Type a message and press Enter… █                  │    │
+│ ╰─────────────────────────────────────────────────────╯    │
+│                                                             │
+│  [Enter] Send  [b/Esc] Back                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> If the gateway is not yet running, the panel will prompt you to start it first.
+
+| Key | Action |
+|-----|--------|
+| Type | Compose your message |
+| `Enter` | Send the message |
+| `Backspace` | Delete last character |
+| `b` / `Esc` | Back to menu |
+
+---
+
+### Server Info Panel
+
+Displays the live base URL and API key. Use one-key shortcuts to copy them directly to the clipboard.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ jh-gateway                         ● Gateway: running       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Server Info                                                │
+│                                                             │
+│ ╭───────────────────────────────────────────────────╮      │
+│ │  Base URL:  http://127.0.0.1:8741                 │      │
+│ │  API Key:   jh-local-xxxxxxxxxxxxxxxxxxxxxxxx     │      │
+│ ╰───────────────────────────────────────────────────╯      │
+│                                                             │
+│  Copied URL!                                                │
+│                                                             │
+│  [c] Copy URL    [k] Copy Key    [b/Esc] Back              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Key | Action |
+|-----|--------|
+| `c` | Copy base URL to clipboard |
+| `k` | Copy API key to clipboard |
+| `b` / `Esc` | Back to menu |
+
+---
+
+### Settings Panel
+
+Edit gateway configuration inline — no config file edits needed. Navigate to a field and press `Enter` to edit; `Enter` again to confirm, `Esc` to cancel.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ jh-gateway                         ● Gateway: running       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Settings                                                   │
+│                                                             │
+│  > Port:          8741                                      │
+│    CDP URL:       http://127.0.0.1:9222                     │
+│    Default Model: claude-opus-4.5                           │
+│    Auth Mode:     bearer                                    │
+│                                                             │
+│  [↑↓] Navigate  [Enter] Edit  [b/Esc] Back                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+While editing a field the cursor is visible and input is echoed live:
+
+```text
+  > Port:  9000█
+```
+
+Changes are validated and written to `~/.jh-gateway/config.json` on confirm.
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Move between fields |
+| `Enter` | Start / confirm editing |
+| `Esc` | Cancel editing |
+| `b` / `Esc` | Back to menu (when not editing) |
+
+---
+
+### TUI keyboard shortcuts at a glance
+
+| Key | Context | Action |
+|-----|---------|--------|
+| `↑` / `↓` | Menu, Model, Settings | Navigate items |
+| `Enter` | Main Menu | Open selected panel |
+| `Enter` | Gateway Panel | Start / Stop gateway |
+| `Enter` | Chat | Send message |
+| `Enter` | Settings | Begin / confirm editing a field |
+| `b` / `Esc` | Any panel | Return to main menu |
+| `c` | Server Info | Copy base URL to clipboard |
+| `k` | Server Info | Copy API key to clipboard |
+| `q` / `Esc` | Main Menu | Quit |
+| `Ctrl+C` | Anywhere | Force quit |
+
+---
+
 ## Usage
 
 ### curl
