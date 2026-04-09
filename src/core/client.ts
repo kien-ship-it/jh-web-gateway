@@ -99,66 +99,16 @@ async function sendChatRequestInner(
     },
   };
 
-  // Strategy: use Playwright route interception to capture the SSE stream response
-  // at the network level. This avoids race conditions where the page's own JS
-  // consumes the stream before our page.evaluate GET can reach it.
+  // Strategy: use Playwright's network observation to capture the SSE stream.
   //
-  // Flow:
-  // 1. Set up a route handler to intercept the SSE stream response
-  // 2. POST via page.evaluate to start the chat (returns streamId)
-  // 3. The page's own JS will GET /stream/{id} — we intercept that response
-  // 4. We read the full SSE body, then fulfill the route so the page isn't broken
+  // The JH flow: POST → JSON {streamId} → someone GETs /stream/{id} → SSE
+  // The page's own JS handles the stream GET. We use page.waitForResponse()
+  // to observe the actual network response when it happens, then read the body.
+  // No polling, no racing — we just listen for the real response.
 
-  const sseCapture: { resolve: (v: { error: boolean; status: number; statusText: string; body: string }) => void; promise: Promise<{ error: boolean; status: number; statusText: string; body: string }> } = {} as any;
-  sseCapture.promise = new Promise((res) => { sseCapture.resolve = res; });
+  type Result = { error: boolean; status: number; statusText: string; body: string };
 
-  let routeRegistered = false;
-
-  // Intercept the SSE stream GET at the network level
-  const streamPattern = `${JH_API_BASE}/agents/chat/stream/*`;
-  const routeHandler = async (route: import("playwright-core").Route) => {
-    try {
-      const response = await route.fetch();
-      const responseBody = await response.text();
-      const status = response.status();
-
-      sseCapture.resolve({
-        error: status !== 200,
-        status,
-        statusText: response.statusText(),
-        body: responseBody,
-      });
-
-      // Fulfill the route so the page's JS gets the response too
-      const hdrs: Record<string, string> = {};
-      for (const h of response.headersArray()) {
-        hdrs[h.name] = h.value;
-      }
-      await route.fulfill({
-        status,
-        headers: hdrs,
-        body: responseBody,
-      });
-    } catch (err) {
-      sseCapture.resolve({
-        error: true,
-        status: 500,
-        statusText: "route error",
-        body: String(err),
-      });
-      try { await route.continue(); } catch { /* ignore */ }
-    }
-  };
-
-  try {
-    await page.route(streamPattern, routeHandler);
-    routeRegistered = true;
-  } catch {
-    // If route registration fails, fall back to page.evaluate approach
-    routeRegistered = false;
-  }
-
-  // POST to start the chat via page.evaluate (sends cookies automatically)
+  // POST to start the chat
   const postResult = await page.evaluate(
     async ({
       apiBase,
@@ -178,8 +128,6 @@ async function sendChatRequestInner(
             "Content-Type": "application/json",
             Accept: "text/event-stream",
             Authorization: `Bearer ${bearerToken}`,
-            Origin: "https://chat.ai.jh.edu",
-            Referer: "https://chat.ai.jh.edu/",
           },
           body: JSON.stringify(requestBody),
         });
@@ -194,30 +142,26 @@ async function sendChatRequestInner(
           };
         }
 
-        const contentType = res.headers.get("content-type") ?? "";
+        const ct = res.headers.get("content-type") ?? "";
 
-        // If the POST itself returns SSE, read it directly
-        if (contentType.includes("text/event-stream")) {
+        // If POST returns SSE directly, read it
+        if (ct.includes("text/event-stream")) {
           const reader = res.body?.getReader();
-          if (!reader) {
-            return { error: true, status: 500, statusText: "No body", body: "No SSE response body", contentType };
-          }
+          if (!reader) return { error: true, status: 500, statusText: "No body", body: "No SSE body", contentType: ct };
           const decoder = new TextDecoder();
-          let fullText = "";
+          let text = "";
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            fullText += decoder.decode(value, { stream: true });
+            text += decoder.decode(value, { stream: true });
           }
-          return { error: false, status: 200, body: fullText, contentType };
+          return { error: false, status: 200, statusText: "OK", body: text, contentType: ct };
         }
 
-        // Otherwise return the JSON body (should contain streamId)
         const bodyText = await res.text();
-        return { error: false, status: 200, body: bodyText, contentType };
+        return { error: false, status: 200, statusText: "OK", body: bodyText, contentType: ct };
       } catch (err) {
-        const msg = String(err);
-        return { error: true, status: 500, statusText: "fetch error", body: msg, contentType: "" };
+        return { error: true, status: 500, statusText: "fetch error", body: String(err), contentType: "" };
       }
     },
     {
@@ -228,60 +172,59 @@ async function sendChatRequestInner(
     },
   );
 
-  // Determine result based on POST response
-  let result: { error: boolean; status: number; statusText: string; body: string };
+  let result: Result;
 
   if (postResult.error) {
-    result = { error: postResult.error, status: postResult.status, statusText: postResult.statusText ?? "", body: postResult.body };
-    if (routeRegistered) await page.unroute(streamPattern, routeHandler);
+    result = { error: true, status: postResult.status, statusText: postResult.statusText ?? "", body: postResult.body };
   } else if (postResult.contentType.includes("text/event-stream")) {
-    // POST returned SSE directly — no need for stream interception
-    result = { error: postResult.error, status: postResult.status, statusText: postResult.statusText ?? "", body: postResult.body };
-    if (routeRegistered) await page.unroute(streamPattern, routeHandler);
+    result = { error: false, status: 200, statusText: "OK", body: postResult.body };
   } else {
-    // POST returned JSON (streamId flow) — the page's JS will GET the stream.
-    // Wait for our route interceptor to capture it.
-    if (routeRegistered) {
-      // Set a timeout in case the page doesn't fetch the stream
-      const timeout = new Promise<{ error: boolean; status: number; statusText: string; body: string }>((res) =>
-        setTimeout(() => res({ error: true, status: 408, statusText: "timeout", body: "Stream interception timed out — page did not fetch the stream within 30s" }), 30_000)
-      );
-      result = await Promise.race([sseCapture.promise, timeout]);
-      await page.unroute(streamPattern, routeHandler);
+    // POST returned JSON with streamId
+    let streamId: string | undefined;
+    try {
+      streamId = (JSON.parse(postResult.body) as { streamId?: string }).streamId;
+    } catch { /* not JSON */ }
+
+    if (!streamId) {
+      result = { error: false, status: 200, statusText: "OK", body: postResult.body };
     } else {
-      // Fallback: try GET ourselves (may fail due to race)
-      const fallbackResult = await page.evaluate(
-        async ({ apiBase, streamBody, bearerToken, convId }: { apiBase: string; streamBody: string; bearerToken: string; convId: string }) => {
-          try {
-            const parsed = JSON.parse(streamBody) as { streamId?: string };
-            if (!parsed.streamId) return { error: false, status: 200, body: streamBody };
-            const sseRes = await fetch(`${apiBase}/agents/chat/stream/${parsed.streamId}`, {
-              method: "GET",
-              headers: {
-                Accept: "text/event-stream",
-                Authorization: `Bearer ${bearerToken}`,
-                Origin: "https://chat.ai.jh.edu",
-                Referer: `https://chat.ai.jh.edu/c/${convId}`,
-              },
-            });
-            if (!sseRes.ok) return { error: true, status: sseRes.status, statusText: sseRes.statusText, body: (await sseRes.text()).slice(0, 2000) };
-            const reader = sseRes.body?.getReader();
-            if (!reader) return { error: true, status: 500, statusText: "No body", body: "No SSE body" };
-            const decoder = new TextDecoder();
-            let fullText = "";
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              fullText += decoder.decode(value, { stream: true });
+      // Wait for the actual network response to the stream URL.
+      // The page's JS will make the GET — we just observe the response.
+      try {
+        const streamResponse = await page.waitForResponse(
+          (resp) => resp.url().includes(`/agents/chat/stream/${streamId}`) && resp.status() === 200,
+          { timeout: 120_000 },
+        );
+        const sseBody = await streamResponse.text();
+        result = { error: false, status: 200, statusText: "OK", body: sseBody };
+      } catch {
+        // Page didn't fetch the stream — try fetching it ourselves via page.evaluate
+        const fallback = await page.evaluate(
+          async ({ url, token }: { url: string; token: string }) => {
+            try {
+              const res = await fetch(url, {
+                method: "GET",
+                headers: { Accept: "text/event-stream", Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) return { error: true, status: res.status, statusText: res.statusText, body: (await res.text()).slice(0, 2000) };
+              const reader = res.body?.getReader();
+              if (!reader) return { error: true, status: 500, statusText: "No body", body: "No SSE body" };
+              const decoder = new TextDecoder();
+              let text = "";
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                text += decoder.decode(value, { stream: true });
+              }
+              return { error: false, status: 200, statusText: "OK", body: text };
+            } catch (err) {
+              return { error: true, status: 500, statusText: "fetch error", body: String(err) };
             }
-            return { error: false, status: 200, body: fullText };
-          } catch (err) {
-            return { error: true, status: 500, statusText: "fetch error", body: String(err) };
-          }
-        },
-        { apiBase: JH_API_BASE, streamBody: postResult.body, bearerToken: credentials.bearerToken, convId: conversationId },
-      );
-      result = { ...fallbackResult, statusText: fallbackResult.statusText ?? "" };
+          },
+          { url: `${JH_API_BASE}/agents/chat/stream/${streamId}`, token: credentials.bearerToken },
+        );
+        result = { ...fallback, statusText: fallback.statusText ?? "" };
+      }
     }
   }
 
