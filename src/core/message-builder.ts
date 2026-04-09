@@ -58,7 +58,7 @@ export function buildPrompt(
         break;
 
       case "user":
-        parts.push(`Human: ${msg.content ?? ""}`);
+        parts.push(`${msg.content ?? ""}`);
         break;
 
       case "assistant": {
