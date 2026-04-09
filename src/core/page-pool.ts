@@ -19,7 +19,6 @@ export class PagePool {
     private maxPages: number;
     private maxWaitMs: number;
     private initPromise: Promise<void> | null = null;
-    private acquireLock: Promise<void> = Promise.resolve();
 
     constructor(options: {
         targetUrl?: string;
@@ -64,45 +63,35 @@ export class PagePool {
 
     /**
      * Acquire a page for use. Creates new pages on-demand up to maxPages.
-     * Uses a lock to prevent race conditions when multiple requests arrive simultaneously.
+     * Note: We intentionally don't lock here — allowing multiple requests to
+     * grab the same page and queue on it is actually faster than creating new pages.
      */
     async acquire(): Promise<{ page: Page; queue: RequestQueue; release: () => void }> {
-        // Serialize acquire calls to prevent race conditions
-        const previousLock = this.acquireLock;
-        let releaseLock: () => void;
-        this.acquireLock = new Promise(resolve => { releaseLock = resolve; });
+        // First, try to find an available (non-busy) page
+        let pooled = this.pages.find(p => !p.inUse);
 
-        await previousLock;
-
-        try {
-            // First, try to find an available (non-busy) page
-            let pooled = this.pages.find(p => !p.inUse);
-
-            // If all pages are busy and we haven't hit max, create a new one
-            if (!pooled && this.pages.length < this.maxPages && this.browser) {
-                pooled = await this.createPage();
-            }
-
-            // If still no page available, pick the one with the smallest queue
-            if (!pooled) {
-                pooled = this.pages.reduce((a, b) =>
-                    a.queue.pending <= b.queue.pending ? a : b
-                );
-            }
-
-            pooled.inUse = true;
-            const p = pooled;
-
-            return {
-                page: p.page,
-                queue: p.queue,
-                release: () => {
-                    p.inUse = false;
-                },
-            };
-        } finally {
-            releaseLock!();
+        // If all pages are busy and we haven't hit max, create a new one
+        if (!pooled && this.pages.length < this.maxPages && this.browser) {
+            pooled = await this.createPage();
         }
+
+        // If still no page available, pick the one with the smallest queue
+        if (!pooled) {
+            pooled = this.pages.reduce((a, b) =>
+                a.queue.pending <= b.queue.pending ? a : b
+            );
+        }
+
+        pooled.inUse = true;
+        const p = pooled;
+
+        return {
+            page: p.page,
+            queue: p.queue,
+            release: () => {
+                p.inUse = false;
+            },
+        };
     }
 
     private async createPage(): Promise<PooledPage> {
