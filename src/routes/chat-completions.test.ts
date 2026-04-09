@@ -3,6 +3,8 @@ import { createServer } from "../server.js";
 import { getDefaultConfig } from "../infra/config.js";
 import type { GatewayConfig } from "../infra/types.js";
 import type { Page } from "playwright-core";
+import type { PagePool } from "../core/page-pool.js";
+import { RequestQueue } from "../core/request-queue.js";
 
 // Mock the browser client so tests never touch a real browser
 vi.mock("../core/client.js", () => ({
@@ -31,10 +33,25 @@ const FAKE_CREDENTIALS = {
 
 const FAKE_PAGE = {} as Page;
 
+/** Create a mock PagePool for testing */
+function createMockPool(page: Page | null): PagePool {
+  const queue = new RequestQueue();
+  return {
+    stats: { total: 1, busy: 0, available: 1 },
+    acquire: async () => ({
+      page: page!,
+      queue,
+      release: () => { },
+    }),
+    drain: async () => { },
+    init: async () => { },
+  } as unknown as PagePool;
+}
+
 function makeServer(configOverride?: Partial<GatewayConfig>) {
   const config: GatewayConfig = { ...getDefaultConfig(), ...configOverride };
   return createServer(config, {
-    getPage: () => FAKE_PAGE,
+    getPool: () => createMockPool(FAKE_PAGE),
     getCredentials: () => FAKE_CREDENTIALS,
   });
 }
@@ -104,7 +121,7 @@ describe("POST /v1/chat/completions", () => {
   it("returns 503 when browser page is not available", async () => {
     const config = getDefaultConfig();
     const app = createServer(config, {
-      getPage: () => null,
+      getPool: () => null,
       getCredentials: () => FAKE_CREDENTIALS,
     });
     const res = await app.request("/v1/chat/completions", {
@@ -120,7 +137,7 @@ describe("POST /v1/chat/completions", () => {
   it("returns 401 when credentials are not available", async () => {
     const config = getDefaultConfig();
     const app = createServer(config, {
-      getPage: () => FAKE_PAGE,
+      getPool: () => createMockPool(FAKE_PAGE),
       getCredentials: () => null,
     });
     const res = await app.request("/v1/chat/completions", {

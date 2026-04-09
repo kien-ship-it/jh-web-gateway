@@ -48,6 +48,7 @@ Commands:
 
 Options:
   serve --port <n>   Override the configured port
+  serve --pages <n>  Max concurrent browser pages (default: 3)
   logs  --limit <n>  Number of log entries to show (default: 50)
   --help             Show this help message
 `);
@@ -77,7 +78,16 @@ async function main(): Promise<void> {
           console.error("Error: --port must be a valid port number (1–65535)");
           process.exit(1);
         }
-        await runServe({ port });
+        const pagesFlag = flags["pages"];
+        const pages =
+          pagesFlag !== undefined && pagesFlag !== true
+            ? Number(pagesFlag)
+            : undefined;
+        if (pages !== undefined && (isNaN(pages) || pages < 1 || pages > 10)) {
+          console.error("Error: --pages must be between 1 and 10");
+          process.exit(1);
+        }
+        await runServe({ port, pages });
         break;
       }
 

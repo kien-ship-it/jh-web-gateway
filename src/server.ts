@@ -1,23 +1,21 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
-import type { Page } from "playwright-core";
 import { modelsRouter } from "./routes/models.js";
 import { healthRouter } from "./routes/health.js";
 import { chatCompletionsRouter } from "./routes/chat-completions.js";
 import { authMiddleware } from "./infra/gateway-auth.js";
 import { Logger } from "./infra/logger.js";
-import { RequestQueue } from "./core/request-queue.js";
+import type { PagePool } from "./core/page-pool.js";
 import type { GatewayConfig, RequestLogEntry } from "./infra/types.js";
 
 export interface ServerDeps {
-  getPage: () => Page | null;
+  getPool: () => PagePool | null;
   getCredentials: () => GatewayConfig["credentials"];
 }
 
 export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono {
   const app = new Hono();
   const startTime = Date.now();
-  const queue = new RequestQueue(config.maxQueueWaitMs);
   const logger = new Logger();
 
   // Auth middleware on /v1/* routes
@@ -60,7 +58,7 @@ export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono {
     };
 
     // Fire-and-forget — don't block the response
-    logger.log(entry).catch(() => {});
+    logger.log(entry).catch(() => { });
   });
 
   // Mount routes
@@ -71,9 +69,8 @@ export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono {
     app.route(
       "/v1/chat/completions",
       chatCompletionsRouter(config, {
-        getPage: deps.getPage,
+        getPool: deps.getPool,
         getCredentials: deps.getCredentials,
-        queue,
       }),
     );
   }
@@ -135,7 +132,7 @@ export async function startServer(
   const DRAIN_TIMEOUT_MS = 10_000;
 
   const shutdown = async () => {
-    if (shuttingDown) {return;}
+    if (shuttingDown) { return; }
     shuttingDown = true;
     console.log("\nShutting down gracefully...");
 

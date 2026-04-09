@@ -1,20 +1,18 @@
 import { Hono } from "hono";
 import { stream as honoStream } from "hono/streaming";
-import type { Page } from "playwright-core";
 import type { GatewayConfig, OpenAIMessage, OpenAITool } from "../infra/types.js";
 import { MODEL_ENDPOINT_MAP } from "../infra/types.js";
 import { buildPrompt } from "../core/message-builder.js";
 import { sendChatRequest } from "../core/client.js";
 import { translateToStream, translateToCompletion } from "../core/stream-translator.js";
-import { RequestQueue } from "../core/request-queue.js";
+import type { PagePool } from "../core/page-pool.js";
 import { randomBytes } from "node:crypto";
 
 const MODEL_SET = new Set(Object.keys(MODEL_ENDPOINT_MAP));
 
 interface ChatCompletionsDeps {
-  getPage: () => Page | null;
+  getPool: () => PagePool | null;
   getCredentials: () => GatewayConfig["credentials"];
-  queue: RequestQueue;
 }
 
 export function chatCompletionsRouter(
@@ -94,9 +92,9 @@ export function chatCompletionsRouter(
       | { type: string; function: { name: string } }
       | undefined;
 
-    // Check browser page availability
-    const page = deps.getPage();
-    if (!page) {
+    // Check page pool availability
+    const pool = deps.getPool();
+    if (!pool) {
       return c.json(
         {
           error: {
@@ -129,9 +127,14 @@ export function chatCompletionsRouter(
     const built = buildPrompt(messages as OpenAIMessage[], tools, toolChoice);
     const completionId = `chatcmpl-${randomBytes(12).toString("hex")}`;
 
+    // Acquire a page from the pool
+    const { page, queue, release } = await pool.acquire();
+    const stats = pool.stats;
+    console.log(`[chat] Acquired page (pool: ${stats.busy}/${stats.total} busy)`);
+
     try {
       // Enqueue and execute via browser client
-      const response = await deps.queue.enqueue(() =>
+      const response = await queue.enqueue(() =>
         sendChatRequest(page, credentials, {
           model,
           prompt: built.prompt,
@@ -163,15 +166,19 @@ export function chatCompletionsRouter(
               },
             };
             await stream.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+          } finally {
+            release();
           }
           await stream.write("data: [DONE]\n\n");
         });
       }
 
       // Non-streaming JSON response
+      release();
       const completion = translateToCompletion(response.rawSseText, model, completionId);
       return c.json(completion);
     } catch (err: unknown) {
+      release();
       const error = err as Error & { statusCode?: number };
       const statusCode = error.statusCode ?? 500;
 
