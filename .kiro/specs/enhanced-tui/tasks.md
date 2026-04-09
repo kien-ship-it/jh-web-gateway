@@ -34,7 +34,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - **Property 6: Server info display accuracy** (partial — clipboard is a dependency of info display)
     - **Validates: Requirements 7.4, 7.5**
 
-  - [ ] 2.3 Implement navigation helpers (`src/tui/utils/navigation.ts`)
+  - [x] 2.3 Implement navigation helpers (`src/tui/utils/navigation.ts`)
     - Implement `wrapIndex(current: number, delta: number, listSize: number): number` that computes `((current + delta) % listSize + listSize) % listSize`
     - Export the function for use by MainMenu and ModelSelector
     - _Requirements: 3.3, 3.4, 5.3_
@@ -62,11 +62,11 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Verify `PANEL_SHORTCUTS[panelId]` returns exactly the expected shortcut set and no shortcuts from other panels
     - **Validates: Requirements 8.1**
 
-- [ ] 3. Checkpoint — Verify utilities
+- [x] 3. Checkpoint — Verify utilities
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Gateway lifecycle adapter
-  - [ ] 4.1 Implement gateway lifecycle adapter (`src/tui/services/gateway-lifecycle.ts`)
+- [x] 4. Gateway lifecycle adapter
+  - [x] 4.1 Implement gateway lifecycle adapter (`src/tui/services/gateway-lifecycle.ts`)
     - Define `GatewayLifecycleCallbacks` interface with `onPhase`, `onSuccess`, `onError`
     - Implement `startGatewayForTui(config, options, callbacks)` that mirrors `runStart` logic:
       - Phase 1: Create `ChromeManager`, call `connect()`, invoke `callbacks.onPhase("Connecting to Chrome")`
@@ -78,7 +78,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Do NOT register SIGINT/SIGTERM handlers (the TUI root handles those)
     - _Requirements: 4.1, 4.2, 4.3, 4.5, 4.6_
 
-  - [ ]* 4.2 Write unit tests for gateway lifecycle adapter
+  - [ ]* 4.2 Write unit tests for gateway lifecycle adapter (optional, skipped)
     - Mock `ChromeManager`, `captureCredentials`, `PagePool`, `startServer`, `TokenRefresher`
     - Verify `onPhase` is called with correct phase labels in sequence
     - Verify `onSuccess` is called with correct baseUrl and apiKey on success
@@ -86,21 +86,21 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Verify `stopGateway` calls shutdown methods in correct order
     - _Requirements: 4.2, 4.3, 4.5, 4.6_
 
-- [ ] 5. Shared UI components
-  - [ ] 5.1 Implement HeaderBar component (`src/tui/components/HeaderBar.tsx`)
+- [x] 5. Shared UI components
+  - [x] 5.1 Implement HeaderBar component (`src/tui/components/HeaderBar.tsx`)
     - Accept `gatewayStatus` prop: `"stopped" | "starting" | "running" | "error"`
     - Render single line: left-aligned "jh-gateway", right-aligned status with colored indicator
     - Green dot for running, red for stopped/error, yellow for starting
     - Use Ink's `<Box>` with `justifyContent="space-between"` and `<Text>` with color props
     - _Requirements: 8.6_
 
-  - [ ] 5.2 Implement FooterBar component (`src/tui/components/FooterBar.tsx`)
+  - [x] 5.2 Implement FooterBar component (`src/tui/components/FooterBar.tsx`)
     - Accept `shortcuts: FooterShortcut[]` prop
     - Render single line with shortcuts formatted as `[key] label` separated by spaces
     - Use Ink's `<Box>` and `<Text>` with dim styling for brackets
     - _Requirements: 8.1_
 
-  - [ ] 5.3 Implement AppContext and state management (`src/tui/AppContext.tsx`)
+  - [x] 5.3 Implement AppContext and state management (`src/tui/AppContext.tsx`)
     - Create React context `AppContext` holding `TuiAppState` and dispatch functions
     - Implement `AppProvider` component that:
       - Loads config via `loadConfig()` on mount
@@ -108,8 +108,8 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Export `useAppContext()` hook
     - _Requirements: 3.5, 4.4, 5.4_
 
-- [ ] 6. Panel components — Part 1
-  - [ ] 6.1 Implement SplashScreen panel (`src/tui/panels/SplashScreen.tsx`)
+- [x] 6. Panel components — Part 1
+  - [x] 6.1 Implement SplashScreen panel (`src/tui/panels/SplashScreen.tsx`)
     - Accept `onComplete: () => void` prop
     - Define ASCII-art JHU logo as a string constant
     - Use `useEffect` + `setInterval` to reveal characters sequentially over 1500–2500ms
@@ -119,7 +119,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Any keypress after animation calls `onComplete`
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-  - [ ] 6.2 Implement MainMenu panel (`src/tui/panels/MainMenu.tsx`)
+  - [x] 6.2 Implement MainMenu panel (`src/tui/panels/MainMenu.tsx`)
     - Render `MENU_ITEMS` as a vertical list using Ink `<Box flexDirection="column">`
     - Track `focusedIndex` state, initialized to 0
     - Use `useInput` hook for arrow keys: Down calls `wrapIndex(focusedIndex, 1, MENU_ITEMS.length)`, Up calls `wrapIndex(focusedIndex, -1, MENU_ITEMS.length)`
@@ -129,13 +129,13 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - `q` or Escape triggers quit confirmation dialog
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
 
-  - [ ]* 6.3 Write property test for menu description match
+  - [ ]* 6.3 Write property test for menu description match (optional, skipped)
     - **Property 2: Focused item description matches menu data**
     - Generate random index `fc.integer({min:0, max:5})`
     - Verify the description displayed for index `i` equals `MENU_ITEMS[i].description`
     - **Validates: Requirements 3.7**
 
-  - [ ] 6.4 Implement ModelSelector panel (`src/tui/panels/ModelSelector.tsx`)
+  - [x] 6.4 Implement ModelSelector panel (`src/tui/panels/ModelSelector.tsx`)
     - Accept `models`, `activeModel`, `onSelect`, `onBack` props
     - Render model list with `●` marker for active model, `○` for others
     - Track `focusedIndex` state; use `wrapIndex` for Up/Down navigation
@@ -144,17 +144,17 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Escape or `b` calls `onBack`
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
 
-  - [ ]* 6.5 Write property test for model selection persistence
+  - [ ]* 6.5 Write property test for model selection persistence (optional, skipped)
     - **Property 3: Model selection persistence and confirmation**
     - Generate random model via `fc.constantFrom(...Object.keys(MODEL_ENDPOINT_MAP))`
     - Mock `updateConfig`, simulate selection, verify `updateConfig` called with `{ defaultModel: model }` and confirmation message contains model name
     - **Validates: Requirements 5.4, 5.5**
 
-- [ ] 7. Checkpoint — Verify shared components and Part 1 panels
+- [x] 7. Checkpoint — Verify shared components and Part 1 panels
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Panel components — Part 2
-  - [ ] 8.1 Implement GatewayPanel (`src/tui/panels/GatewayPanel.tsx`)
+- [x] 8. Panel components — Part 2
+  - [x] 8.1 Implement GatewayPanel (`src/tui/panels/GatewayPanel.tsx`)
     - Read `gatewayStatus`, `serverHandle`, `chromeState`, `tokenRefresher` from `useAppContext()`
     - Display current status and Start/Stop button
     - On Start: call `startGatewayForTui(config, { headless: false }, callbacks)` where callbacks update gateway phases in local state
@@ -166,7 +166,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Escape or `b` navigates back to menu without stopping gateway
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8_
 
-  - [ ] 8.2 Implement ChatPanel (`src/tui/panels/ChatPanel.tsx`)
+  - [x] 8.2 Implement ChatPanel (`src/tui/panels/ChatPanel.tsx`)
     - Read `gatewayStatus`, `config` from `useAppContext()`
     - When gateway not running: show "Gateway is not running. Press Enter to start it." — Enter navigates to GatewayPanel
     - When gateway running: render text input field (Ink `<TextInput>`) at bottom, response area above
@@ -191,7 +191,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Verify the extraction logic returns text that includes `c`
     - **Validates: Requirements 6.5**
 
-  - [ ] 8.5 Implement InfoPanel (`src/tui/panels/InfoPanel.tsx`)
+  - [x] 8.5 Implement InfoPanel (`src/tui/panels/InfoPanel.tsx`)
     - Accept `port`, `apiKey`, `gatewayRunning`, `onBack` from context/props
     - Display base URL as `http://127.0.0.1:{port}` and API key in a bordered box (Ink `<Box borderStyle="round">`)
     - When gateway not running, show "not running" indicator
@@ -207,7 +207,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Verify displayed URL equals `http://127.0.0.1:{port}` and API key display matches (or shows "no auth" when null)
     - **Validates: Requirements 7.1**
 
-  - [ ] 8.7 Implement SettingsPanel (`src/tui/panels/SettingsPanel.tsx`)
+  - [x] 8.7 Implement SettingsPanel (`src/tui/panels/SettingsPanel.tsx`)
     - Read config from `useAppContext()`
     - Display editable fields: `port`, `cdpUrl`, `defaultModel`, `auth.mode`
     - Track `focusedField` and `editingField` state
@@ -229,11 +229,11 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Verify: valid values result in `updateConfig` being called and displayed value updating; invalid values leave config unchanged and produce an error message
     - **Validates: Requirements 9.3, 9.4**
 
-- [ ] 9. Checkpoint — Verify all panels
+- [x] 9. Checkpoint — Verify all panels
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. App shell, router, and quit dialog
-  - [ ] 10.1 Implement quit confirmation dialog (`src/tui/components/QuitDialog.tsx`)
+- [x] 10. App shell, router, and quit dialog
+  - [x] 10.1 Implement quit confirmation dialog (`src/tui/components/QuitDialog.tsx`)
     - Render overlay: "Quit jh-gateway? Running gateway will be stopped. [y/N]"
     - `y` confirms: call `stopGateway` if running, then exit
     - `N` or Escape cancels: return to previous panel
@@ -246,7 +246,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Simulate triggering quit dialog then canceling; verify TUI returns to the same panel with state unchanged
     - **Validates: Requirements 10.1, 10.3**
 
-  - [ ] 10.3 Implement App root with router (`src/tui/App.tsx`)
+  - [x] 10.3 Implement App root with router (`src/tui/App.tsx`)
     - Wrap everything in `<AppProvider>`
     - Render `<HeaderBar>` at top, active panel in middle (flex-grow), `<FooterBar>` at bottom
     - Implement panel router: switch on `currentPanel` to render the correct panel component
@@ -254,7 +254,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Handle global `q` keypress to show `<QuitDialog>` overlay from any panel
     - _Requirements: 1.2, 8.1, 8.6_
 
-  - [ ] 10.4 Implement TUI entry point (`src/tui/index.ts`)
+  - [x] 10.4 Implement TUI entry point (`src/tui/index.ts`)
     - Implement `launchTui()` async function
     - Check terminal size: if below 80×24, display resize message and wait
     - Call Ink's `render(<App />, { exitOnCtrlC: false })` to use alternate screen buffer
@@ -262,7 +262,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Handle unhandled errors: restore terminal, print to stderr, exit 1
     - _Requirements: 1.2, 1.3, 1.4, 10.4, 10.5_
 
-  - [ ] 10.5 Modify CLI entry point (`src/cli.ts`)
+  - [x] 10.5 Modify CLI entry point (`src/cli.ts`)
     - Change the no-argument case: instead of `printHelp()`, dynamically import `./tui/index.js` and call `launchTui()`
     - Add `"tui"` as a recognized command that also calls `launchTui()`
     - Keep `--help` / `-h` behavior: print help and exit
@@ -277,7 +277,7 @@ Build a full-screen interactive Terminal User Interface using Ink (React for ter
     - Verify unknown command prints error
     - _Requirements: 1.1_
 
-- [ ] 11. Final checkpoint — Ensure all tests pass
+- [x] 11. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

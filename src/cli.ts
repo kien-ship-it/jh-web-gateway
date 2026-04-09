@@ -60,9 +60,15 @@ Options:
 }
 
 async function main(): Promise<void> {
-  if (!command || command === "--help" || command === "-h") {
+  if (command === "--help" || command === "-h") {
     printHelp();
     process.exit(0);
+  }
+
+  if (!command || command === "tui") {
+    const { launchTui } = await import("./tui/index.js");
+    await launchTui();
+    return;
   }
 
   const flags = parseFlags(args.slice(1));
