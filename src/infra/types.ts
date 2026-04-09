@@ -6,6 +6,8 @@ export interface GatewayCredentials {
   bearerToken: string;
   cookie: string;
   userAgent: string;
+  /** JWT exp claim (unix seconds), optional for backward compatibility */
+  expiresAt?: number;
 }
 
 export interface GatewayConfig {
@@ -181,14 +183,14 @@ export interface BuiltPrompt {
 
 /** Maps model IDs to JH platform endpoint paths */
 export const MODEL_ENDPOINT_MAP: Record<string, string> = {
-  "claude-opus-4.5":   "AnthropicClaude",
+  "claude-opus-4.5": "AnthropicClaude",
   "claude-sonnet-4.5": "AnthropicClaude",
-  "claude-haiku-4.5":  "AnthropicClaude",
-  "gpt-4.1":           "OpenAI",
-  "o3":                "OpenAI",
-  "o3-mini":           "OpenAI",
-  "gpt-5":             "OpenAI",
-  "gpt-5.1":           "OpenAI",
-  "gpt-5.2":           "OpenAI",
-  "llama3-3-70b-instruct":  "Meta",
+  "claude-haiku-4.5": "AnthropicClaude",
+  "gpt-4.1": "OpenAI",
+  "o3": "OpenAI",
+  "o3-mini": "OpenAI",
+  "gpt-5": "OpenAI",
+  "gpt-5.1": "OpenAI",
+  "gpt-5.2": "OpenAI",
+  "llama3-3-70b-instruct": "Meta",
 } as const;

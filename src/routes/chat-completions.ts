@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { stream as honoStream } from "hono/streaming";
-import type { GatewayConfig, OpenAIMessage, OpenAITool } from "../infra/types.js";
+import type { GatewayConfig, GatewayCredentials, OpenAIMessage, OpenAITool } from "../infra/types.js";
 import { MODEL_ENDPOINT_MAP } from "../infra/types.js";
 import { buildPrompt } from "../core/message-builder.js";
 import { sendChatRequest } from "../core/client.js";
 import { translateToStream, translateToCompletion } from "../core/stream-translator.js";
 import type { PagePool } from "../core/page-pool.js";
+import type { ReauthLock } from "../core/reauth-lock.js";
+import { captureCredentials } from "../core/auth-capture.js";
 import { randomBytes } from "node:crypto";
 
 const MODEL_SET = new Set(Object.keys(MODEL_ENDPOINT_MAP));
@@ -13,6 +15,8 @@ const MODEL_SET = new Set(Object.keys(MODEL_ENDPOINT_MAP));
 interface ChatCompletionsDeps {
   getPool: () => PagePool | null;
   getCredentials: () => GatewayConfig["credentials"];
+  reauthLock?: ReauthLock;
+  setCredentials?: (creds: GatewayCredentials) => void;
 }
 
 export function chatCompletionsRouter(
@@ -184,6 +188,94 @@ export function chatCompletionsRouter(
       const error = err as Error & { statusCode?: number };
       const statusCode = error.statusCode ?? 500;
 
+      // ── 401 retry via ReauthLock ──────────────────────────────────────
+      if (statusCode === 401 && deps.reauthLock) {
+        try {
+          const freshCreds = await deps.reauthLock.acquire(async () => {
+            const captured = await captureCredentials(_config.cdpUrl);
+            return {
+              bearerToken: captured.bearerToken,
+              cookie: captured.cookie,
+              userAgent: captured.userAgent,
+            };
+          });
+
+          // Update the credential holder so future requests use fresh creds
+          deps.setCredentials?.(freshCreds);
+
+          // Re-acquire a page and retry exactly once
+          const retry = await pool.acquire();
+          try {
+            const retryResponse = await retry.queue.enqueue(() =>
+              sendChatRequest(retry.page, freshCreds, {
+                model: model as string,
+                prompt: built.prompt,
+              }),
+            );
+
+            if (shouldStream) {
+              const chunks = translateToStream(retryResponse.rawSseText, model as string, completionId);
+              return honoStream(c, async (stream) => {
+                c.header("Content-Type", "text/event-stream");
+                c.header("Cache-Control", "no-cache");
+                c.header("Connection", "keep-alive");
+                try {
+                  for (const chunk of chunks) {
+                    await stream.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                  }
+                } catch (streamErr: unknown) {
+                  const sErr = streamErr as Error;
+                  const errorEvent = {
+                    error: {
+                      message: sErr.message || "An error occurred during streaming",
+                      type: "server_error",
+                      code: "stream_error",
+                      param: null,
+                    },
+                  };
+                  await stream.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+                } finally {
+                  retry.release();
+                }
+                await stream.write("data: [DONE]\n\n");
+              });
+            }
+
+            retry.release();
+            const completion = translateToCompletion(retryResponse.rawSseText, model as string, completionId);
+            return c.json(completion);
+          } catch {
+            retry.release();
+            // Retry failed — fall through to return 401
+          }
+        } catch {
+          // Re-capture itself failed — fall through to return 401
+        }
+
+        // If we reach here, either re-capture or retry failed → 401
+        const reauthErrorBody = {
+          error: {
+            message: "Authentication failed after automatic re-capture attempt.",
+            type: "authentication_error",
+            code: "upstream_error",
+            param: null,
+          },
+        };
+
+        if (shouldStream) {
+          return honoStream(c, async (stream) => {
+            c.header("Content-Type", "text/event-stream");
+            c.header("Cache-Control", "no-cache");
+            c.header("Connection", "keep-alive");
+            await stream.write(`data: ${JSON.stringify(reauthErrorBody)}\n\n`);
+            await stream.write("data: [DONE]\n\n");
+          });
+        }
+
+        return c.json(reauthErrorBody, 401);
+      }
+
+      // ── Standard error response ───────────────────────────────────────
       const typeMap: Record<number, string> = {
         400: "invalid_request_error",
         401: "authentication_error",

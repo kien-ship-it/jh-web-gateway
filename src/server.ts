@@ -6,11 +6,14 @@ import { chatCompletionsRouter } from "./routes/chat-completions.js";
 import { authMiddleware } from "./infra/gateway-auth.js";
 import { Logger } from "./infra/logger.js";
 import type { PagePool } from "./core/page-pool.js";
-import type { GatewayConfig, RequestLogEntry } from "./infra/types.js";
+import type { GatewayConfig, GatewayCredentials, RequestLogEntry } from "./infra/types.js";
+import type { ReauthLock } from "./core/reauth-lock.js";
 
 export interface ServerDeps {
   getPool: () => PagePool | null;
   getCredentials: () => GatewayConfig["credentials"];
+  reauthLock?: ReauthLock;
+  setCredentials?: (creds: GatewayCredentials) => void;
 }
 
 export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono {
@@ -71,6 +74,8 @@ export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono {
       chatCompletionsRouter(config, {
         getPool: deps.getPool,
         getCredentials: deps.getCredentials,
+        reauthLock: deps.reauthLock,
+        setCredentials: deps.setCredentials,
       }),
     );
   }

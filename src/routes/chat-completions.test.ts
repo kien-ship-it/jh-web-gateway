@@ -12,7 +12,15 @@ vi.mock("../core/client.js", () => ({
   isTokenExpired: vi.fn(() => false),
 }));
 
+// Mock auth-capture so tests never touch a real browser for re-capture
+vi.mock("../core/auth-capture.js", () => ({
+  captureCredentials: vi.fn(),
+}));
+
 import { sendChatRequest } from "../core/client.js";
+import { captureCredentials } from "../core/auth-capture.js";
+import { ReauthLock } from "../core/reauth-lock.js";
+import fc from "fast-check";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -271,5 +279,130 @@ describe("POST /v1/chat/completions", () => {
     const body = await res.json();
     expect(body.error.type).toBe("authentication_error");
     expect(body.error.message).toContain("token expired");
+  });
+});
+
+
+// ── Property 3: Exactly-once 401 retry per request ───────────────────────────
+// **Validates: Requirements 6.2**
+
+const FRESH_CREDENTIALS = {
+  bearerToken: "fresh-token",
+  cookie: "cf_clearance=fresh",
+  userAgent: "Mozilla/5.0 Fresh",
+  expiresAt: 9999999999,
+};
+
+/** Create a server wired with ReauthLock + setCredentials for 401 retry tests */
+function makeServerWithReauth() {
+  const config = getDefaultConfig();
+  const reauthLock = new ReauthLock();
+  let setCalled = 0;
+
+  const app = createServer(config, {
+    getPool: () => createMockPool(FAKE_PAGE),
+    getCredentials: () => FAKE_CREDENTIALS,
+    reauthLock,
+    setCredentials: () => { setCalled++; },
+  });
+
+  return { app, reauthLock, getSetCalledCount: () => setCalled };
+}
+
+describe("Property 3: Exactly-once 401 retry per request", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("retries exactly once on 401 and succeeds (single request)", async () => {
+    // First call: 401 error. Second call: success.
+    const mockSend = vi.mocked(sendChatRequest);
+    mockSend
+      .mockRejectedValueOnce(
+        Object.assign(new Error("401 Unauthorized"), { statusCode: 401 }),
+      )
+      .mockResolvedValueOnce({
+        rawSseText: makeSse("Retried OK"),
+        conversationId: "conv-retry",
+        parentMessageId: "msg-retry",
+      });
+
+    vi.mocked(captureCredentials).mockResolvedValueOnce(FRESH_CREDENTIALS);
+
+    const { app } = makeServerWithReauth();
+    const res = await app.request("/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-opus-4.5",
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockSend).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(captureCredentials)).toHaveBeenCalledTimes(1);
+  });
+
+  it("for any N concurrent requests hitting 401, each retries at most once and captureCredentials is called exactly once", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.integer({ min: 1, max: 20 }),
+        async (concurrentCount) => {
+          vi.clearAllMocks();
+
+          // Track per-call invocations: odd calls (1st, 3rd, ...) fail with 401,
+          // even calls (2nd, 4th, ...) succeed — simulating first-fail-then-succeed per request.
+          let callIndex = 0;
+          const mockSend = vi.mocked(sendChatRequest);
+          mockSend.mockImplementation(async () => {
+            const idx = callIndex++;
+            // Each request's first attempt fails, retry succeeds.
+            // With N concurrent requests, calls 0..N-1 are first attempts (401),
+            // calls N..2N-1 are retries (success).
+            if (idx < concurrentCount) {
+              const err = Object.assign(new Error("401 Unauthorized"), { statusCode: 401 });
+              throw err;
+            }
+            return {
+              rawSseText: makeSse("OK"),
+              conversationId: "conv",
+              parentMessageId: "msg",
+            };
+          });
+
+          // captureCredentials should be deduplicated via ReauthLock
+          vi.mocked(captureCredentials).mockResolvedValue(FRESH_CREDENTIALS);
+
+          const { app } = makeServerWithReauth();
+
+          // Fire N concurrent requests
+          const requests = Array.from({ length: concurrentCount }, () =>
+            app.request("/v1/chat/completions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "claude-opus-4.5",
+                messages: [{ role: "user", content: "hi" }],
+              }),
+            }),
+          );
+
+          const responses = await Promise.all(requests);
+
+          // Each request should succeed (200)
+          for (const res of responses) {
+            expect(res.status).toBe(200);
+          }
+
+          // Total sendChatRequest calls: at most 2 per request (original + retry)
+          expect(mockSend.mock.calls.length).toBeLessThanOrEqual(concurrentCount * 2);
+
+          // captureCredentials called exactly once due to ReauthLock deduplication
+          expect(vi.mocked(captureCredentials)).toHaveBeenCalledTimes(1);
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });

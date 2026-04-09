@@ -9,6 +9,7 @@ import { runAuth } from "./cli/auth.js";
 import { runConfig } from "./cli/config.js";
 import { runStatus } from "./cli/status.js";
 import { runLogs } from "./cli/logs.js";
+import { runStart } from "./cli/start.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -39,6 +40,7 @@ Usage:
   jh-gateway <command> [options]
 
 Commands:
+  start              Launch Chrome, authenticate, and start the gateway server
   setup              Interactive setup wizard (Chrome detection, auth, port)
   serve              Start the HTTP server
   auth               Re-capture JH credentials
@@ -47,6 +49,9 @@ Commands:
   logs               Display recent request logs
 
 Options:
+  start --headless   Launch Chrome in headless mode
+  start --port <n>   Override the configured port
+  start --pages <n>  Max concurrent browser pages (default: 3)
   serve --port <n>   Override the configured port
   serve --pages <n>  Max concurrent browser pages (default: 3)
   logs  --limit <n>  Number of log entries to show (default: 50)
@@ -64,6 +69,30 @@ async function main(): Promise<void> {
 
   try {
     switch (command) {
+      case "start": {
+        const headless = flags["headless"] === true;
+        const startPortFlag = flags["port"];
+        const startPort =
+          startPortFlag !== undefined && startPortFlag !== true
+            ? Number(startPortFlag)
+            : undefined;
+        if (startPort !== undefined && (isNaN(startPort) || startPort < 1 || startPort > 65535)) {
+          console.error("Error: --port must be a valid port number (1–65535)");
+          process.exit(1);
+        }
+        const startPagesFlag = flags["pages"];
+        const startPages =
+          startPagesFlag !== undefined && startPagesFlag !== true
+            ? Number(startPagesFlag)
+            : undefined;
+        if (startPages !== undefined && (isNaN(startPages) || startPages < 1 || startPages > 10)) {
+          console.error("Error: --pages must be between 1 and 10");
+          process.exit(1);
+        }
+        await runStart({ headless, port: startPort, pages: startPages });
+        break;
+      }
+
       case "setup":
         await runSetup();
         break;

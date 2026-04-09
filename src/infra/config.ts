@@ -25,7 +25,7 @@ export function getDefaultConfig(): GatewayConfig {
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-function validateConfig(raw: unknown): GatewayConfig {
+export function validateConfig(raw: unknown): GatewayConfig {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("Config validation error: config must be a JSON object");
   }
@@ -121,7 +121,14 @@ function validateConfig(raw: unknown): GatewayConfig {
     defaultEndpoint: c.defaultEndpoint,
     credentials:
       c.credentials != null
-        ? (c.credentials as GatewayConfig["credentials"])
+        ? {
+          bearerToken: (c.credentials as Record<string, unknown>).bearerToken as string,
+          cookie: (c.credentials as Record<string, unknown>).cookie as string,
+          userAgent: (c.credentials as Record<string, unknown>).userAgent as string,
+          expiresAt: typeof (c.credentials as Record<string, unknown>).expiresAt === "number"
+            ? ((c.credentials as Record<string, unknown>).expiresAt as number)
+            : 0,
+        }
         : null,
     auth: {
       mode: auth.mode,
