@@ -84,7 +84,8 @@ describe("POST /v1/chat/completions", () => {
       body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.code).toBe("missing_field");
     expect(body.error.param).toBe("model");
   });
@@ -97,7 +98,8 @@ describe("POST /v1/chat/completions", () => {
       body: JSON.stringify({ model: "unknown-model-xyz", messages: [{ role: "user", content: "hi" }] }),
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.code).toBe("model_not_found");
   });
 
@@ -109,7 +111,8 @@ describe("POST /v1/chat/completions", () => {
       body: JSON.stringify({ model: "claude-opus-4.5" }),
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.code).toBe("missing_field");
     expect(body.error.param).toBe("messages");
   });
@@ -122,7 +125,8 @@ describe("POST /v1/chat/completions", () => {
       body: "not-json",
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.code).toBe("invalid_json");
   });
 
@@ -138,7 +142,8 @@ describe("POST /v1/chat/completions", () => {
       body: JSON.stringify({ model: "claude-opus-4.5", messages: [{ role: "user", content: "hi" }] }),
     });
     expect(res.status).toBe(503);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.code).toBe("chrome_disconnected");
   });
 
@@ -154,7 +159,8 @@ describe("POST /v1/chat/completions", () => {
       body: JSON.stringify({ model: "claude-opus-4.5", messages: [{ role: "user", content: "hi" }] }),
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.code).toBe("no_credentials");
   });
 
@@ -170,7 +176,8 @@ describe("POST /v1/chat/completions", () => {
       }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.object).toBe("chat.completion");
     expect(body.model).toBe("claude-opus-4.5");
     expect(body.choices[0].message.role).toBe("assistant");
@@ -240,7 +247,8 @@ describe("POST /v1/chat/completions", () => {
       }),
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.type).toBe("authentication_error");
   });
 
@@ -276,7 +284,8 @@ describe("POST /v1/chat/completions", () => {
       }),
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await res.json() as any;
     expect(body.error.type).toBe("authentication_error");
     expect(body.error.message).toContain("token expired");
   });

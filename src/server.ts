@@ -125,10 +125,13 @@ export async function startServer(
   const app = createServer(config, deps);
   const port = config.port;
 
-  const server = serve({
-    fetch: app.fetch,
-    port,
-    hostname,
+  const server = await new Promise<ReturnType<typeof serve>>((resolve, reject) => {
+    const s = serve({ fetch: app.fetch, port, hostname }, () => {
+      s.removeListener("error", onError);
+      resolve(s);
+    });
+    const onError = (err: Error) => reject(err);
+    s.once("error", onError);
   });
 
   console.log(`JH Web Gateway listening on http://${hostname}:${port}`);
