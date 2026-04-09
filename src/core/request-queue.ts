@@ -24,6 +24,9 @@ export class RequestQueue {
     try {
       return await task();
     } finally {
+      // Brief cooldown before releasing the queue — the JH platform needs time
+      // to clean up the previous generation before accepting a new one.
+      await new Promise((r) => setTimeout(r, 1500));
       this.release();
     }
   }

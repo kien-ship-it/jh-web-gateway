@@ -32,6 +32,7 @@ export function isTokenExpired(token: string): boolean {
 
 /**
  * Execute a chat request via in-browser fetch (Cloudflare bypass).
+ * Auto-retries up to 2 times if the stream fetch fails (JH platform flakiness).
  */
 export async function sendChatRequest(
   page: Page,
@@ -42,7 +43,24 @@ export async function sendChatRequest(
     onCredentialsRefreshed?: (creds: GatewayCredentials) => void;
   },
 ): Promise<ChatResponse> {
-  return sendChatRequestInner(page, credentials, request, options, false);
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await sendChatRequestInner(page, credentials, request, options, false);
+    } catch (err) {
+      const error = err as Error & { statusCode?: number };
+      // Only retry on 404 (stream not found) — other errors are real
+      if (error.statusCode === 404 && attempt < MAX_ATTEMPTS) {
+        console.log(`[gateway] Stream not found, retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS})...`);
+        // Wait before retry to let the platform settle
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+  // Should never reach here
+  throw new Error("Unexpected: all retry attempts exhausted");
 }
 
 async function sendChatRequestInner(
