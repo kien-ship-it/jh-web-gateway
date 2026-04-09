@@ -87,7 +87,7 @@ async function sendChatRequestInner(
     greeting: JH_DEFAULT_GREETING,
     key: "never",
     modelDisplayLabel: "Claude",
-    isTemporary: false,
+    isTemporary: true,
     isRegenerate: false,
     isContinued: false,
     ephemeralAgent: {
@@ -99,14 +99,91 @@ async function sendChatRequestInner(
     },
   };
 
-  // Strategy: use Playwright's network observation to capture the SSE stream.
-  //
-  // The JH flow: POST → JSON {streamId} → someone GETs /stream/{id} → SSE
-  // The page's own JS handles the stream GET. We use page.waitForResponse()
-  // to observe the actual network response when it happens, then read the body.
-  // No polling, no racing — we just listen for the real response.
+  // Strategy: intercept the stream GET at the network level via page.route().
+  // The page's JS fires the GET immediately after POST, but the stream may not
+  // be ready yet (server needs time to set it up). We intercept the request,
+  // retry with backoff until the stream is available, then fulfill the response
+  // to both the page and our code.
 
   type Result = { error: boolean; status: number; statusText: string; body: string };
+
+  let sseResolve: (v: Result) => void;
+  const ssePromise = new Promise<Result>((res) => { sseResolve = res; });
+  let sseResolved = false;
+
+  const streamPattern = "**/api/agents/chat/stream/*";
+
+  const routeHandler = async (route: import("playwright-core").Route) => {
+    console.log(`[gateway] Route handler intercepted: ${route.request().url()}`);
+    const url = route.request().url();
+
+    // Don't use route.fetch() for retries — each call consumes the stream.
+    // Instead, poll with Node.js fetch until the stream is ready, then fulfill once.
+    const delays = [0, 200, 400, 600, 1000, 1500, 2000, 3000, 4000, 5000];
+    let lastStatus = 0;
+    let lastBody = "";
+    let lastHeaders: Record<string, string> = {};
+
+    // Extract headers from the original request to forward them
+    const reqHeaders = route.request().headers();
+
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i] > 0) {
+        await new Promise((r) => setTimeout(r, delays[i]));
+      }
+      try {
+        // Use Node.js global fetch — NOT route.fetch() — to avoid consuming the stream
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Accept: reqHeaders["accept"] ?? "text/event-stream",
+            Authorization: reqHeaders["authorization"] ?? "",
+            Cookie: reqHeaders["cookie"] ?? "",
+            Referer: reqHeaders["referer"] ?? "",
+            "User-Agent": reqHeaders["user-agent"] ?? "",
+          },
+        });
+
+        lastStatus = response.status;
+        lastBody = await response.text();
+        lastHeaders = {};
+        response.headers.forEach((v, k) => { lastHeaders[k] = v; });
+
+        if (lastStatus === 200) {
+          console.log(`[gateway] Stream ready on attempt ${i + 1}, body length: ${lastBody.length}`);
+          if (!sseResolved) {
+            sseResolved = true;
+            sseResolve({ error: false, status: 200, statusText: "OK", body: lastBody });
+          }
+          // Fulfill the intercepted route with the data we got
+          await route.fulfill({ status: 200, headers: lastHeaders, body: lastBody });
+          return;
+        }
+
+        if (lastStatus !== 404) {
+          console.log(`[gateway] Stream non-404 error: ${lastStatus}, body: ${lastBody.slice(0, 200)}`);
+          break;
+        }
+      } catch (err) {
+        lastBody = String(err);
+        lastStatus = 500;
+        break;
+      }
+    }
+
+    console.log(`[gateway] Stream fetch failed after ${delays.length} attempts, last status: ${lastStatus}`);
+    if (!sseResolved) {
+      sseResolved = true;
+      sseResolve({ error: true, status: lastStatus, statusText: "stream fetch failed", body: lastBody });
+    }
+    try {
+      await route.fulfill({ status: lastStatus, headers: lastHeaders, body: lastBody });
+    } catch {
+      try { await route.continue(); } catch { /* ignore */ }
+    }
+  };
+
+  await page.route(streamPattern, routeHandler);
 
   // POST to start the chat
   const postResult = await page.evaluate(
@@ -144,7 +221,6 @@ async function sendChatRequestInner(
 
         const ct = res.headers.get("content-type") ?? "";
 
-        // If POST returns SSE directly, read it
         if (ct.includes("text/event-stream")) {
           const reader = res.body?.getReader();
           if (!reader) return { error: true, status: 500, statusText: "No body", body: "No SSE body", contentType: ct };
@@ -159,6 +235,7 @@ async function sendChatRequestInner(
         }
 
         const bodyText = await res.text();
+        console.log(`[gateway] POST response content-type: ${ct}, body: ${bodyText.slice(0, 500)}`);
         return { error: false, status: 200, statusText: "OK", body: bodyText, contentType: ct };
       } catch (err) {
         return { error: true, status: 500, statusText: "fetch error", body: String(err), contentType: "" };
@@ -176,10 +253,14 @@ async function sendChatRequestInner(
 
   if (postResult.error) {
     result = { error: true, status: postResult.status, statusText: postResult.statusText ?? "", body: postResult.body };
+    await page.unroute(streamPattern, routeHandler);
   } else if (postResult.contentType.includes("text/event-stream")) {
     result = { error: false, status: 200, statusText: "OK", body: postResult.body };
+    await page.unroute(streamPattern, routeHandler);
   } else {
-    // POST returned JSON with streamId
+    // POST returned JSON with streamId — the page's JS will GET the stream,
+    // and our route handler will intercept it with retry logic.
+    // Also fire our own GET as a fallback in case the page doesn't.
     let streamId: string | undefined;
     try {
       streamId = (JSON.parse(postResult.body) as { streamId?: string }).streamId;
@@ -187,44 +268,35 @@ async function sendChatRequestInner(
 
     if (!streamId) {
       result = { error: false, status: 200, statusText: "OK", body: postResult.body };
+      await page.unroute(streamPattern, routeHandler);
     } else {
-      // Wait for the actual network response to the stream URL.
-      // The page's JS will make the GET — we just observe the response.
-      try {
-        const streamResponse = await page.waitForResponse(
-          (resp) => resp.url().includes(`/agents/chat/stream/${streamId}`) && resp.status() === 200,
-          { timeout: 120_000 },
-        );
-        const sseBody = await streamResponse.text();
-        result = { error: false, status: 200, statusText: "OK", body: sseBody };
-      } catch {
-        // Page didn't fetch the stream — try fetching it ourselves via page.evaluate
-        const fallback = await page.evaluate(
-          async ({ url, token }: { url: string; token: string }) => {
-            try {
-              const res = await fetch(url, {
-                method: "GET",
-                headers: { Accept: "text/event-stream", Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) return { error: true, status: res.status, statusText: res.statusText, body: (await res.text()).slice(0, 2000) };
-              const reader = res.body?.getReader();
-              if (!reader) return { error: true, status: 500, statusText: "No body", body: "No SSE body" };
-              const decoder = new TextDecoder();
-              let text = "";
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                text += decoder.decode(value, { stream: true });
-              }
-              return { error: false, status: 200, statusText: "OK", body: text };
-            } catch (err) {
-              return { error: true, status: 500, statusText: "fetch error", body: String(err) };
-            }
-          },
-          { url: `${JH_API_BASE}/agents/chat/stream/${streamId}`, token: credentials.bearerToken },
-        );
-        result = { ...fallback, statusText: fallback.statusText ?? "" };
-      }
+      // Fire our own GET as fallback (the route handler intercepts it too)
+      const streamUrl = `${JH_API_BASE}/agents/chat/stream/${streamId}`;
+      page.evaluate(
+        async ({ url, token }: { url: string; token: string }) => {
+          await new Promise((r) => setTimeout(r, 100));
+          try {
+            await fetch(url, {
+              method: "GET",
+              headers: { Accept: "text/event-stream", Authorization: `Bearer ${token}` },
+            });
+          } catch { /* route handler captures it */ }
+        },
+        { url: streamUrl, token: credentials.bearerToken },
+      ).catch(() => { /* ignore */ });
+
+      // Wait for the route handler to resolve
+      const timeout = new Promise<Result>((res) =>
+        setTimeout(() => {
+          if (!sseResolved) {
+            sseResolved = true;
+            res({ error: true, status: 408, statusText: "timeout", body: "Stream capture timed out after 120s" });
+          }
+        }, 120_000),
+      );
+
+      result = await Promise.race([ssePromise, timeout]);
+      await page.unroute(streamPattern, routeHandler);
     }
   }
 
@@ -268,6 +340,8 @@ async function sendChatRequestInner(
 
     throw Object.assign(new Error(`JH platform returned ${status}: ${responseBody}`), { statusCode: status });
   }
+
+  console.log(`[gateway] Final result: error=${result.error}, status=${result.status}, body length=${result.body.length}`);
 
   const rawSseText = result.body as string;
   const { newConversationId, newParentMessageId } =
