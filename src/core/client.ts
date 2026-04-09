@@ -52,8 +52,8 @@ export async function sendChatRequest(
       // Only retry on 404 (stream not found) — other errors are real
       if (error.statusCode === 404 && attempt < MAX_ATTEMPTS) {
         console.log(`[gateway] Stream not found, retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS})...`);
-        // Wait before retry to let the platform settle
-        await new Promise((r) => setTimeout(r, 2000));
+        // Brief pause before retry
+        await new Promise((r) => setTimeout(r, 500));
         continue;
       }
       throw err;
@@ -137,7 +137,8 @@ async function sendChatRequestInner(
 
     // Don't use route.fetch() for retries — each call consumes the stream.
     // Instead, poll with Node.js fetch until the stream is ready, then fulfill once.
-    const delays = [0, 200, 400, 600, 1000, 1500, 2000, 3000, 4000, 5000];
+    // Aggressive early polling — stream is usually ready within 100-300ms
+    const delays = [0, 50, 100, 150, 250, 400, 700, 1200, 2000, 3500];
     let lastStatus = 0;
     let lastBody = "";
     let lastHeaders: Record<string, string> = {};
@@ -292,7 +293,7 @@ async function sendChatRequestInner(
       const streamUrl = `${JH_API_BASE}/agents/chat/stream/${streamId}`;
       page.evaluate(
         async ({ url, token }: { url: string; token: string }) => {
-          await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 10));
           try {
             await fetch(url, {
               method: "GET",

@@ -123,12 +123,14 @@ export function chatCompletionsRouter(
       );
     }
 
-    // Build prompt from OpenAI messages
-    const built = buildPrompt(messages as OpenAIMessage[], tools, toolChoice);
     const completionId = `chatcmpl-${randomBytes(12).toString("hex")}`;
 
-    // Acquire a page from the pool
-    const { page, queue, release } = await pool.acquire();
+    // Parallelize prompt building and page acquisition — they're independent
+    const [built, acquired] = await Promise.all([
+      Promise.resolve(buildPrompt(messages as OpenAIMessage[], tools, toolChoice)),
+      pool.acquire(),
+    ]);
+    const { page, queue, release } = acquired;
     const stats = pool.stats;
     console.log(`[chat] Acquired page (pool: ${stats.busy}/${stats.total} busy)`);
 
