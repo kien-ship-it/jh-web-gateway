@@ -1,0 +1,41 @@
+{
+  "name": "jh-web-gateway",
+  "version": "0.1.0",
+  "description": "Standalone local HTTP server exposing an OpenAI-compatible API backed by the JH web platform",
+  "type": "module",
+  "bin": {
+    "jh-gateway": "dist/cli.js",
+    "jh-web-gateway": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "compile:macos-arm64": "bun build --compile --target=bun-darwin-arm64 src/cli.ts --outfile binaries/jh-gateway-macos-arm64",
+    "compile:macos-x64": "bun build --compile --target=bun-darwin-x64 src/cli.ts --outfile binaries/jh-gateway-macos-x64",
+    "compile:linux-x64": "bun build --compile --target=bun-linux-x64 src/cli.ts --outfile binaries/jh-gateway-linux-x64",
+    "compile:windows-x64": "bun build --compile --target=bun-windows-x64 src/cli.ts --outfile binaries/jh-gateway-windows-x64.exe",
+    "compile:all": "bun run compile:macos-arm64 && bun run compile:macos-x64 && bun run compile:linux-x64 && bun run compile:windows-x64",
+    "test": "vitest --run",
+    "test:coverage": "vitest --run --coverage"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.10.0",
+    "@hono/node-server": "^1.14.0",
+    "hono": "^4.7.0",
+    "playwright-core": "^1.52.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0",
+    "fast-check": "*",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
+  }
+}
