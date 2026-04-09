@@ -15,51 +15,29 @@ Use it to plug JH-hosted models (Claude, GPT, Llama) into any tool that speaks t
 npm install -g jh-web-gateway
 ```
 
-Or clone and build locally:
-
-```bash
-git clone <repo-url>
-cd jh-web-gateway
-npm install
-npm run build
-```
-
 ## Getting Started
 
-### 1. Launch Chrome with remote debugging
-
-Quit Chrome if it's already running, then:
+### First run — log in once
 
 ```bash
-# macOS
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.jh-gateway/chrome-profile"
-
-# Linux
-google-chrome --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.jh-gateway/chrome-profile"
+jh-gateway start
 ```
 
-### 2. Log into JH
+This launches Chrome, opens [chat.ai.jh.edu](https://chat.ai.jh.edu), and waits for you to sign in. Once you do, it captures your credentials, minimizes Chrome, and starts the gateway server. Your credentials are saved to `~/.jh-gateway/config.json` for future runs.
 
-Open [chat.ai.jh.edu](https://chat.ai.jh.edu) in that Chrome window and sign in.
-
-### 3. Run setup
+### Subsequent runs — headless
 
 ```bash
-jh-gateway setup
+jh-gateway start --headless
 ```
 
-This walks you through Chrome detection, credential capture, and API key generation.
+No browser window. Credentials are loaded from the config, and a background token refresher keeps them alive automatically. If the session ever expires, run `jh-gateway start` (without `--headless`) to re-login.
 
-### 4. Start the gateway
+### Connect your tools
 
-```bash
-jh-gateway serve
-```
-
-The server starts at `http://127.0.0.1:8741` by default.
+Point any OpenAI-compatible tool at:
+- Base URL: `http://127.0.0.1:8741/v1`
+- API Key: printed at startup as `API Key: jh-local-...`
 
 ## Usage
 
@@ -100,7 +78,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://127.0.0.1:8741/v1",
-    api_key="jh-local-..."  # from setup
+    api_key="jh-local-..."  # printed at startup
 )
 
 response = client.chat.completions.create(
@@ -131,30 +109,39 @@ console.log(completion.choices[0].message.content);
 
 Point any OpenAI-compatible tool at:
 - Base URL: `http://127.0.0.1:8741/v1`
-- API Key: your `jh-local-...` key from setup
+- API Key: your `jh-local-...` key from startup
 
-## CLI Commands
+## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `jh-gateway setup` | Interactive setup wizard (Chrome detection, auth, port) |
-| `jh-gateway serve` | Start the HTTP server |
-| `jh-gateway auth` | Re-capture JH credentials |
+| `jh-gateway start` | Launch Chrome, authenticate, and start the gateway |
+| `jh-gateway setup` | Interactive setup wizard (legacy) |
+| `jh-gateway serve` | Start the HTTP server only (legacy) |
+| `jh-gateway auth` | Re-capture JH credentials manually |
 | `jh-gateway config` | Print current config (credentials redacted) |
 | `jh-gateway status` | Show Chrome connection, token expiry, gateway state |
 | `jh-gateway logs` | Display recent request logs |
 
-Options:
-- `serve --port <n>` — override the configured port
-- `logs --limit <n>` — number of log entries to show (default: 50)
+### `start` options
+
+| Flag | Description |
+|------|-------------|
+| `--headless` | Launch Chrome without a visible window (requires prior login) |
+| `--port <n>` | Override the configured port |
+| `--pages <n>` | Max concurrent browser pages (default: 3) |
+
+## Token Refresh
+
+While the gateway is running, a background process checks your token every 60 seconds. If it's within 5 minutes of expiry, it silently reloads the JH page in Chrome and captures a fresh token — no interruption to in-flight requests. If refresh fails after 3 retries, a warning is printed to the terminal.
 
 ## Available Models
 
-| Model | Endpoint |
+| Model | Provider |
 |-------|----------|
-| `claude-opus-4.5` | AnthropicClaude |
-| `claude-sonnet-4.5` | AnthropicClaude |
-| `claude-haiku-4.5` | AnthropicClaude |
+| `claude-opus-4.5` | Anthropic |
+| `claude-sonnet-4.5` | Anthropic |
+| `claude-haiku-4.5` | Anthropic |
 | `gpt-4.1` | OpenAI |
 | `gpt-5` | OpenAI |
 | `gpt-5.1` | OpenAI |
@@ -165,7 +152,7 @@ Options:
 
 ## Configuration
 
-Config is stored at `~/.jh-gateway/config.json`. You can edit it directly or use the CLI:
+Config is stored at `~/.jh-gateway/config.json`. Edit directly or use the CLI:
 
 ```json
 {
@@ -184,8 +171,7 @@ Config is stored at `~/.jh-gateway/config.json`. You can edit it directly or use
 3. Runs an HTTP server that accepts OpenAI-format requests
 4. Proxies requests through the browser's authenticated session
 5. Translates JH SSE responses back to OpenAI format
-
-Requests are serialized through a FIFO queue since the JH platform handles one conversation turn at a time.
+6. Proactively refreshes tokens before they expire
 
 ## Development
 
@@ -193,30 +179,4 @@ Requests are serialized through a FIFO queue since the JH platform handles one c
 npm test          # run tests
 npm run build     # build with tsup
 npm run dev       # build in watch mode
-```
-
-## Architecture
-
-```
-src/
-├── cli.ts                  # CLI entry point
-├── server.ts               # Hono HTTP server
-├── cli/                    # CLI commands
-├── core/
-│   ├── client.ts           # Browser-based API client (CDP fetch)
-│   ├── auth-capture.ts     # Credential capture via request interception
-│   ├── message-builder.ts  # OpenAI → JH prompt conversion
-│   ├── stream-translator.ts # JH SSE → OpenAI format
-│   ├── request-queue.ts    # FIFO serialization queue
-│   └── tool-parser.ts      # XML tool_call extraction
-├── infra/
-│   ├── types.ts            # Shared types + model→endpoint mapping
-│   ├── config.ts           # Config store (~/.jh-gateway/config.json)
-│   ├── chrome-cdp.ts       # Chrome CDP connection
-│   ├── gateway-auth.ts     # Local API key auth middleware
-│   └── logger.ts           # JSONL request logging
-└── routes/
-    ├── chat-completions.ts # POST /v1/chat/completions
-    ├── health.ts           # GET /health
-    └── models.ts           # GET /v1/models
 ```

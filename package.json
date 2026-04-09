@@ -1,6 +1,6 @@
 {
   "name": "jh-web-gateway",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Standalone local HTTP server exposing an OpenAI-compatible API backed by the JH web platform",
   "type": "module",
   "bin": {
@@ -14,6 +14,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "release": "bash scripts/release.sh",
+    "prepublishOnly": "npm run build && npm test",
     "build": "tsup",
     "dev": "tsup --watch",
     "compile:macos-arm64": "bun build --compile --target=bun-darwin-arm64 src/cli.ts --outfile binaries/jh-gateway-macos-arm64",
