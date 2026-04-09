@@ -30,10 +30,13 @@
     "@clack/prompts": "^0.10.0",
     "@hono/node-server": "^1.14.0",
     "hono": "^4.7.0",
+    "ink": "^7.0.0",
     "playwright-core": "^1.52.0",
+    "react": "^19.2.5",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/react": "^19.2.14",
     "@types/ws": "^8.5.0",
     "fast-check": "*",
     "tsup": "^8.4.0",
