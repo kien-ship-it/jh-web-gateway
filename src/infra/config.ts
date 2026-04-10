@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { GatewayConfig } from "./types.js";
@@ -7,6 +7,10 @@ import type { GatewayConfig } from "./types.js";
 
 export function getConfigPath(): string {
   return join(homedir(), ".jh-gateway", "config.json");
+}
+
+function getConfigDir(): string {
+  return join(homedir(), ".jh-gateway");
 }
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
@@ -142,7 +146,6 @@ export function validateConfig(raw: unknown): GatewayConfig {
 
 export async function loadConfig(): Promise<GatewayConfig> {
   const configPath = getConfigPath();
-  const configDir = join(homedir(), ".jh-gateway");
 
   let raw: string;
   try {
@@ -151,8 +154,7 @@ export async function loadConfig(): Promise<GatewayConfig> {
     // File or directory missing — create with defaults
     if (isNodeError(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
       const defaults = getDefaultConfig();
-      await mkdir(configDir, { recursive: true });
-      await writeFile(configPath, JSON.stringify(defaults, null, 2), "utf8");
+      await saveConfig(defaults);
       return defaults;
     }
     throw err;
@@ -167,14 +169,20 @@ export async function loadConfig(): Promise<GatewayConfig> {
     );
   }
 
-  return validateConfig(parsed);
+  const validated = validateConfig(parsed);
+  await enforceConfigPermissions(configPath, getConfigDir());
+  return validated;
 }
 
 export async function saveConfig(config: GatewayConfig): Promise<void> {
   const configPath = getConfigPath();
-  const configDir = join(homedir(), ".jh-gateway");
-  await mkdir(configDir, { recursive: true });
-  await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
+  const configDir = getConfigDir();
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  await writeFile(configPath, JSON.stringify(config, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await enforceConfigPermissions(configPath, configDir);
 }
 
 export async function updateConfig(
@@ -195,4 +203,20 @@ export async function updateConfig(
 
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && "code" in err;
+}
+
+async function enforceConfigPermissions(
+  configPath: string,
+  configDir: string
+): Promise<void> {
+  await chmod(configDir, 0o700).catch((err: unknown) => {
+    // Best-effort: some filesystems/platforms may not support chmod semantics.
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[config] Could not enforce secure directory permissions: ${message}`);
+  });
+  await chmod(configPath, 0o600).catch((err: unknown) => {
+    // Best-effort: some filesystems/platforms may not support chmod semantics.
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[config] Could not enforce secure file permissions: ${message}`);
+  });
 }

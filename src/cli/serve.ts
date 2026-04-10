@@ -5,10 +5,17 @@ import { loadConfig, updateConfig } from "../infra/config.js";
 import { connectToChrome, findOrOpenJhPage } from "../infra/chrome-cdp.js";
 import { startServer } from "../server.js";
 import { PagePool } from "../core/page-pool.js";
+import { CredentialHolder } from "../core/token-refresher.js";
+import { ReauthLock } from "../core/reauth-lock.js";
 import type { Page } from "playwright-core";
 
 export async function runServe(options: { port?: number; pages?: number }): Promise<void> {
   const config = await loadConfig();
+  const credentialHolder = new CredentialHolder();
+  if (config.credentials) {
+    credentialHolder.set(config.credentials);
+  }
+  const reauthLock = new ReauthLock();
 
   if (options.port !== undefined) {
     await updateConfig({ port: options.port });
@@ -47,7 +54,9 @@ export async function runServe(options: { port?: number; pages?: number }): Prom
 
   await startServer(config, {
     getPool: () => pool,
-    getCredentials: () => config.credentials,
+    getCredentials: () => credentialHolder.get(),
+    reauthLock,
+    setCredentials: (creds) => credentialHolder.set(creds),
     browser,
   });
 }

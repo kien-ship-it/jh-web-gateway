@@ -135,11 +135,13 @@ export async function runStart(options: StartOptions): Promise<void> {
         credentialHolder.set(config.credentials);
     }
 
-    const _reauthLock = new ReauthLock();
+    const reauthLock = new ReauthLock();
 
     const serverHandle = await startServer(config, {
         getPool: () => pool,
         getCredentials: () => credentialHolder.get(),
+        reauthLock,
+        setCredentials: (creds) => credentialHolder.set(creds),
         browser: state.browser,
     });
 

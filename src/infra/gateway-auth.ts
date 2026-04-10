@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import type { GatewayConfig } from "./types.js";
 
@@ -39,7 +40,7 @@ export function authMiddleware(config: GatewayConfig): MiddlewareHandler {
 
     if (mode === "bearer") {
       const expected = `Bearer ${token}`;
-      if (authHeader !== expected) {
+      if (!safeEquals(authHeader, expected)) {
         return c.json(
           {
             error: {
@@ -55,7 +56,7 @@ export function authMiddleware(config: GatewayConfig): MiddlewareHandler {
     } else if (mode === "basic") {
       // Expect Basic base64("gateway:<token>")
       const expected = `Basic ${Buffer.from(`gateway:${token}`).toString("base64")}`;
-      if (authHeader !== expected) {
+      if (!safeEquals(authHeader, expected)) {
         return c.json(
           {
             error: {
@@ -72,4 +73,11 @@ export function authMiddleware(config: GatewayConfig): MiddlewareHandler {
 
     return next();
   };
+}
+
+function safeEquals(actual: string, expected: string): boolean {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length) return false;
+  return timingSafeEqual(actualBuffer, expectedBuffer);
 }
