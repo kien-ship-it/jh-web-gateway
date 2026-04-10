@@ -183,8 +183,6 @@ export function SplashScreen({ onComplete }: SplashScreenProps): React.ReactElem
     return () => clearInterval(id);
   }, [phase]);
 
-  const logoStartRow = Math.max(0, Math.floor((termRows - JHU_LOGO_LINES.length - 6) / 2) - 1);
-
   return (
     <Box flexDirection="column" width="100%" height="100%">
       <Starfield rows={termRows} cols={termCols} tick={tick} />
@@ -193,7 +191,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps): React.ReactElem
         <Text dimColor color="cyan">v{__APP_VERSION__}</Text>
       </Box>
 
-      <Box flexDirection="column" marginTop={logoStartRow} alignItems="flex-start" paddingLeft={2}>
+      <Box flexDirection="column" alignItems="flex-start" paddingLeft={2}>
         {JHU_LOGO_LINES.map((line, i) => {
           let displayLine: string;
           const color = LOGO_COLORS[i] ?? "cyan";

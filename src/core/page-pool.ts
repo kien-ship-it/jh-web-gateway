@@ -19,6 +19,7 @@ export class PagePool {
     private maxPages: number;
     private maxWaitMs: number;
     private initPromise: Promise<void> | null = null;
+    private pagesCreating = 0;
 
     constructor(options: {
         targetUrl?: string;
@@ -70,9 +71,15 @@ export class PagePool {
         // First, try to find an available (non-busy) page
         let pooled = this.pages.find(p => !p.inUse);
 
-        // If all pages are busy and we haven't hit max, create a new one
-        if (!pooled && this.pages.length < this.maxPages && this.browser) {
-            pooled = await this.createPage();
+        // If all pages are busy and we haven't hit max, create a new one.
+        // Include pagesCreating in the capacity check to prevent concurrent over-creation.
+        if (!pooled && (this.pages.length + this.pagesCreating) < this.maxPages && this.browser) {
+            this.pagesCreating++;
+            try {
+                pooled = await this.createPage();
+            } finally {
+                this.pagesCreating--;
+            }
         }
 
         // If still no page available, pick the one with the smallest queue
@@ -108,18 +115,36 @@ export class PagePool {
 
         const page = await context.newPage();
 
-        // Navigate to the target URL
-        await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30_000 });
-        console.log(`[PagePool] New page ready: ${page.url()}`);
+        try {
+            // Navigate to the target URL
+            await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30_000 });
 
-        const pooled: PooledPage = {
-            page,
-            queue: new RequestQueue(this.maxWaitMs),
-            inUse: false,
-        };
+            // Verify we actually landed on the target domain and weren't redirected
+            // to a login/auth page (goto() follows redirects silently).
+            const finalUrl = page.url();
+            if (!finalUrl.includes("chat.ai.jh.edu")) {
+                throw new Error(
+                    `New page redirected away from target: ${finalUrl} — ` +
+                    "browser session may have expired, restart without --headless to re-login."
+                );
+            }
 
-        this.pages.push(pooled);
-        return pooled;
+            console.log(`[PagePool] New page ready: ${finalUrl}`);
+
+            const pooled: PooledPage = {
+                page,
+                queue: new RequestQueue(this.maxWaitMs),
+                inUse: false,
+            };
+
+            this.pages.push(pooled);
+            return pooled;
+        } catch (err) {
+            // Always close the tab on failure to avoid leaving orphaned browser tabs
+            // that the user would have to close manually.
+            await page.close().catch(() => {});
+            throw err;
+        }
     }
 
     /** Close all pages except the seed page */
