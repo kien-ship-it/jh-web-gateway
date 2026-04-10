@@ -166,7 +166,6 @@ export async function captureCredentials(
     targetPage
       .route(routePattern, routeHandler)
       .then(() => {
-        if (settled) return;
         // Route registered — now navigate to trigger auth requests.
         if (!isJhUrl(targetPage.url())) {
           targetPage.goto(`https://${JH_HOST}`, { waitUntil: "commit" }).catch(() => {});
