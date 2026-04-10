@@ -55,11 +55,17 @@ Options:
   serve --port <n>   Override the configured port
   serve --pages <n>  Max concurrent browser pages (default: 3)
   logs  --limit <n>  Number of log entries to show (default: 50)
+  --version, -v      Print version and exit
   --help             Show this help message
 `);
 }
 
 async function main(): Promise<void> {
+  if (command === "--version" || command === "-v") {
+    console.log(__APP_VERSION__);
+    process.exit(0);
+  }
+
   if (command === "--help" || command === "-h") {
     printHelp();
     process.exit(0);
