@@ -17,7 +17,7 @@ const JHU_LOGO = `
       ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝
 `.replace(/^\n/, '');
 
-const ANIMATION_DURATION_MS = 2000;
+const ANIMATION_DURATION_MS = 500;
 
 interface SplashScreenProps {
   onComplete: () => void;

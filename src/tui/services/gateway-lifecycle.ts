@@ -134,7 +134,8 @@ export async function stopGateway(
   tokenRefresher.stop();
   await serverHandle.close();
 
+  // disconnect (not shutdown): hides Chrome and detaches CDP, but keeps
+  // the Chrome process alive so the next start reconnects instantly.
   const chromeManager = new ChromeManager();
-  await chromeManager.hideWindow(chromeState);
-  await chromeManager.shutdown(chromeState);
+  await chromeManager.disconnect(chromeState);
 }

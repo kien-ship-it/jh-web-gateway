@@ -160,6 +160,19 @@ export class ChromeManager {
     }
 
     /**
+     * Gracefully detach from Chrome without killing it.
+     * Hides the window, then disconnects the Playwright CDP session.
+     * Chrome keeps running in the background so the next gateway start
+     * can reconnect to the same instance (preserving session/cookies).
+     */
+    async disconnect(state: ChromeManagerState): Promise<void> {
+        await this.hideWindow(state);
+        // Do NOT call browser.close() — Playwright sends Browser.close over CDP
+        // which kills the Chrome process. We just drop the connection and let
+        // Chrome keep running in the background.
+    }
+
+    /**
      * Attempt to relaunch and reconnect to Chrome within 30s.
      * Returns a fresh ChromeManagerState.
      */

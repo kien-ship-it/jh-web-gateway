@@ -159,11 +159,12 @@ export async function runStart(options: StartOptions): Promise<void> {
     p.log.info("Press Ctrl+C to stop.");
 
     // ── Shutdown handler ────────────────────────────────────────────────
+    // disconnect (not shutdown): hides Chrome and detaches CDP, but keeps
+    // the Chrome process alive so the next `start` reconnects instantly.
     const shutdown = async () => {
         tokenRefresher.stop();
         await serverHandle.close();
-        await chromeManager.hideWindow(state);
-        await chromeManager.shutdown(state);
+        await chromeManager.disconnect(state);
     };
 
     process.on("SIGINT", async () => {
