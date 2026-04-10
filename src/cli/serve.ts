@@ -22,7 +22,7 @@ export async function runServe(options: { port?: number; pages?: number }): Prom
     config.port = options.port;
   }
 
-  const maxPages = options.pages ?? 3;
+  const maxPages = options.pages ?? 1;
 
   let pool: PagePool | null = null;
   let browser: { close(): Promise<void> } | undefined;

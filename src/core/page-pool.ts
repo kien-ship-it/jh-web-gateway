@@ -20,6 +20,7 @@ export class PagePool {
     private maxWaitMs: number;
     private initPromise: Promise<void> | null = null;
     private pagesCreating = 0;
+    private warmedUp = false;
 
     constructor(options: {
         targetUrl?: string;
@@ -27,7 +28,7 @@ export class PagePool {
         maxWaitMs?: number;
     } = {}) {
         this.targetUrl = options.targetUrl ?? "https://chat.ai.jh.edu";
-        this.maxPages = options.maxPages ?? 3;
+        this.maxPages = options.maxPages ?? 1;
         this.maxWaitMs = options.maxWaitMs ?? 120_000;
     }
 
@@ -66,14 +67,19 @@ export class PagePool {
      * Acquire a page for use. Creates new pages on-demand up to maxPages.
      * Note: We intentionally don't lock here — allowing multiple requests to
      * grab the same page and queue on it is actually faster than creating new pages.
+     *
+     * On first init (before any request succeeds), page scaling is disabled to
+     * avoid opening new Chrome tabs that may redirect through SSO and hang.
+     * Call `markWarmedUp()` after the first successful request to enable scaling.
      */
     async acquire(): Promise<{ page: Page; queue: RequestQueue; release: () => void }> {
         // First, try to find an available (non-busy) page
         let pooled = this.pages.find(p => !p.inUse);
 
-        // If all pages are busy and we haven't hit max, create a new one.
-        // Include pagesCreating in the capacity check to prevent concurrent over-creation.
-        if (!pooled && (this.pages.length + this.pagesCreating) < this.maxPages && this.browser) {
+        // Only scale up if the pool is warmed up (first request has succeeded).
+        // Before warm-up, queue on the seed page to avoid opening new tabs that
+        // may redirect through SSO on a fresh session and hang visibly.
+        if (!pooled && this.warmedUp && (this.pages.length + this.pagesCreating) < this.maxPages && this.browser) {
             this.pagesCreating++;
             try {
                 pooled = await this.createPage();
@@ -97,8 +103,21 @@ export class PagePool {
             queue: p.queue,
             release: () => {
                 p.inUse = false;
+                // Auto warm-up after the first successful release
+                if (!this.warmedUp) {
+                    this.warmedUp = true;
+                    console.log(`[PagePool] Warm-up complete — page scaling enabled (max ${this.maxPages})`);
+                }
             },
         };
+    }
+
+    /** Mark the pool as warmed up, enabling page scaling. */
+    markWarmedUp(): void {
+        if (!this.warmedUp) {
+            this.warmedUp = true;
+            console.log(`[PagePool] Warm-up complete — page scaling enabled (max ${this.maxPages})`);
+        }
     }
 
     private async createPage(): Promise<PooledPage> {

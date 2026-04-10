@@ -51,9 +51,9 @@ Commands:
 Options:
   start --headless   Launch Chrome in headless mode
   start --port <n>   Override the configured port
-  start --pages <n>  Max concurrent browser pages (default: 3)
+  start --pages <n>  Max concurrent browser pages (default: 1)
   serve --port <n>   Override the configured port
-  serve --pages <n>  Max concurrent browser pages (default: 3)
+  serve --pages <n>  Max concurrent browser pages (default: 1)
   logs  --limit <n>  Number of log entries to show (default: 50)
   --version, -v      Print version and exit
   --help             Show this help message

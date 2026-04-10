@@ -10,7 +10,7 @@ We investigated improving concurrent request throughput for the JH Gateway. The 
 
 Created a `PagePool` class (`src/core/page-pool.ts`) that manages multiple browser tabs:
 - Each page has its own `RequestQueue` (concurrency=1)
-- Pages are created on-demand up to a configurable max (default: 3)
+- Pages are created on-demand up to a configurable max (default: 1)
 - Requests are distributed across available pages
 
 **CLI option added:** `--pages <n>` to configure max concurrent pages

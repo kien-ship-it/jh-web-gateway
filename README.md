@@ -407,7 +407,7 @@ Point any OpenAI-compatible tool at:
 |------|-------------|
 | `--headless` | Launch Chrome without a visible window (requires prior login) |
 | `--port <n>` | Override the configured port |
-| `--pages <n>` | Max concurrent browser pages (default: 3) |
+| `--pages <n>` | Max concurrent browser pages (default: 1) |
 
 ## Token Refresh
 

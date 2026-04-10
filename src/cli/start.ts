@@ -29,7 +29,7 @@ export async function runStart(options: StartOptions): Promise<void> {
         config.port = options.port;
     }
 
-    const maxPages = options.pages ?? 3;
+    const maxPages = options.pages ?? 1;
     const cdpPort = parseInt(new URL(config.cdpUrl).port, 10) || 9222;
 
     const chromeManager = new ChromeManager({

@@ -46,7 +46,6 @@ const STAR_CHARS = ["·", ".", "*", "✦", "✧", "⋆", "+", "×"];
 const LOGO_COLORS = ["cyan", "cyan", "blueBright", "blueBright", "blue", "blue", "white", "greenBright", "green", "greenBright", "green", "greenBright", "green"] as const;
 
 const GLITCH_PHASE_MS = 600;
-const REVEAL_PHASE_MS = 900;
 const TYPEWRITER_INTERVAL_MS = 28;
 
 function seededRand(seed: number): () => number {
@@ -106,9 +105,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps): React.ReactElem
   const termCols = stdout?.columns ?? 120;
   const termRows = stdout?.rows ?? 30;
 
-  const [phase, setPhase] = useState<"glitch" | "reveal" | "done">("glitch");
+  const [phase, setPhase] = useState<"glitch" | "done">("glitch");
   const [glitchProgress, setGlitchProgress] = useState(0);
-  const [revealedLines, setRevealedLines] = useState(0);
   const [typewriterCount, setTypewriterCount] = useState(0);
   const [showCursor, setShowCursor] = useState(true);
   const skippedRef = useRef(false);
@@ -119,7 +117,6 @@ export function SplashScreen({ onComplete }: SplashScreenProps): React.ReactElem
     if (skippedRef.current) return;
     skippedRef.current = true;
     setPhase("done");
-    setRevealedLines(JHU_LOGO_LINES.length);
     setTypewriterCount(TAGLINE.length);
     setShowCursor(false);
   }, []);
@@ -141,26 +138,11 @@ export function SplashScreen({ onComplete }: SplashScreenProps): React.ReactElem
       setGlitchProgress(p);
       if (p >= 1) {
         clearInterval(id);
-        setPhase("reveal");
+        setPhase("done");
       }
     }, 40);
     return () => clearInterval(id);
   }, []);
-
-  useEffect(() => {
-    if (phase !== "reveal" || skippedRef.current) return;
-    const total = JHU_LOGO_LINES.length;
-    let count = 0;
-    const id = setInterval(() => {
-      count++;
-      setRevealedLines(count);
-      if (count >= total) {
-        clearInterval(id);
-        setPhase("done");
-      }
-    }, Math.round(REVEAL_PHASE_MS / total));
-    return () => clearInterval(id);
-  }, [phase]);
 
   useEffect(() => {
     if (phase !== "done") return;
@@ -199,13 +181,6 @@ export function SplashScreen({ onComplete }: SplashScreenProps): React.ReactElem
           if (phase === "glitch") {
             const lineRand = seededRand(i * 137 + 11);
             displayLine = glitchLine(line, glitchProgress, lineRand);
-          } else if (phase === "reveal") {
-            if (i < revealedLines) {
-              displayLine = line;
-            } else {
-              const lineRand = seededRand(i * 137 + 11);
-              displayLine = glitchLine(line, 0.0, lineRand);
-            }
           } else {
             displayLine = line;
           }

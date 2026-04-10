@@ -25,7 +25,7 @@ export async function startGatewayForTui(
   options: { headless?: boolean; pages?: number },
   callbacks: GatewayLifecycleCallbacks,
 ): Promise<StartGatewayResult> {
-  const maxPages = options.pages ?? 3;
+  const maxPages = options.pages ?? 1;
   const cdpPort = parseInt(new URL(config.cdpUrl).port, 10) || 9222;
 
   const chromeManager = new ChromeManager({
