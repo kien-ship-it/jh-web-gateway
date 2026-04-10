@@ -17,6 +17,7 @@
     "release": "bash scripts/release.sh",
     "prepublishOnly": "npm run build && npm test",
     "build": "tsup",
+    "lint": "tsc --noEmit",
     "dev": "tsup --watch",
     "compile:macos-arm64": "bun build --compile --target=bun-darwin-arm64 src/cli.ts --outfile binaries/jh-gateway-macos-arm64",
     "compile:macos-x64": "bun build --compile --target=bun-darwin-x64 src/cli.ts --outfile binaries/jh-gateway-macos-x64",
