@@ -1,5 +1,5 @@
 import type { GatewayCredentials } from "../infra/types.js";
-import { captureCredentials } from "./auth-capture.js";
+import { captureCredentialsActive } from "./auth-capture.js";
 import { updateConfig } from "../infra/config.js";
 
 /**
@@ -97,7 +97,7 @@ export class TokenRefresher {
         // Attempt refresh with retries and backoff
         for (let attempt = 0; attempt < this.maxRetries; attempt++) {
             try {
-                const newCreds = await captureCredentials(this.cdpUrl);
+                const newCreds = await captureCredentialsActive(this.cdpUrl);
                 const gatewayCreds: GatewayCredentials = {
                     bearerToken: newCreds.bearerToken,
                     cookie: newCreds.cookie,

@@ -1,6 +1,6 @@
 import { ChromeManager } from "../../infra/chrome-manager.js";
 import type { ChromeManagerState } from "../../infra/chrome-manager.js";
-import { findOrOpenJhPage } from "../../infra/chrome-cdp.js";
+import { findOrOpenJhPage, checkBrowserLoginState } from "../../infra/chrome-cdp.js";
 import { captureCredentials } from "../../core/auth-capture.js";
 import { shouldRefresh, CredentialHolder, TokenRefresher } from "../../core/token-refresher.js";
 import { PagePool } from "../../core/page-pool.js";
@@ -38,6 +38,7 @@ export async function startGatewayForTui(
   let state: ChromeManagerState;
   try {
     state = await chromeManager.connect();
+    await chromeManager.showWindow(state);
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     callbacks.onError(error);
@@ -53,7 +54,6 @@ export async function startGatewayForTui(
   if (needsAuth) {
     callbacks.onPhase("Waiting for login");
     try {
-      await findOrOpenJhPage(state.browser);
       const creds = await captureCredentials(config.cdpUrl, 300_000);
       config.credentials = {
         bearerToken: creds.bearerToken,
@@ -61,12 +61,31 @@ export async function startGatewayForTui(
         userAgent: creds.userAgent,
         expiresAt: creds.expiresAt,
       };
-      await chromeManager.minimizeWindow(state);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       callbacks.onError(error);
       await chromeManager.shutdown(state);
       throw error;
+    }
+  } else {
+    callbacks.onPhase("Verifying browser session");
+    const browserLoggedIn = await checkBrowserLoginState(state.browser);
+    if (!browserLoggedIn) {
+      callbacks.onPhase("Browser session expired — please log in");
+      try {
+        const creds = await captureCredentials(config.cdpUrl, 300_000);
+        config.credentials = {
+          bearerToken: creds.bearerToken,
+          cookie: creds.cookie,
+          userAgent: creds.userAgent,
+          expiresAt: creds.expiresAt,
+        };
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        callbacks.onError(error);
+        await chromeManager.shutdown(state);
+        throw error;
+      }
     }
   }
 
@@ -115,7 +134,7 @@ export async function stopGateway(
   tokenRefresher.stop();
   await serverHandle.close();
 
-  // shutdown only uses the state (browser.close + process.kill) — no manager config needed
   const chromeManager = new ChromeManager();
+  await chromeManager.hideWindow(chromeState);
   await chromeManager.shutdown(chromeState);
 }

@@ -99,7 +99,7 @@ The header shows the gateway status at all times. Use arrow keys to navigate and
 │  Launch Chrome, authenticate, and start the HTTP server     │
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
-│ [↑↓] Navigate    [Enter] Select    [q/Esc] Quit            │
+│ [↑↓] Navigate    [Enter] Select    [q/Esc] Quit             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -125,12 +125,12 @@ Select **Start Gateway** to launch Chrome, authenticate, and start the server. A
 │  Starting gateway…                                          │
 │                                                             │
 │  ● Connecting to Chrome                                     │
-│  ◌ Waiting for login          ← active phase               │
+│  ◌ Waiting for login          ← active phase                │
 │  ○ Starting server                                          │
 │                                                             │
-│ ╭──────────────────────────────────────────╮               │
-│ │  Please log in via the Chrome window     │               │
-│ ╰──────────────────────────────────────────╯               │
+│ ╭──────────────────────────────────────────╮                │
+│ │  Please log in via the Chrome window     │                │
+│ ╰──────────────────────────────────────────╯                │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -150,9 +150,9 @@ Once all phases complete the gateway is live:
 │  ● Waiting for login                                        │
 │  ● Starting server                                          │
 │                                                             │
-│  Gateway running on http://127.0.0.1:8741                  │
+│  Gateway running on http://127.0.0.1:8741                   │
 │                                                             │
-│  [b/Esc] Back (gateway keeps running)                      │
+│  [b/Esc] Back (gateway keeps running)                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -181,7 +181,7 @@ Choose the AI model for all requests. The currently active model is marked with 
 │                                                             │
 │  Select Model                                               │
 │                                                             │
-│  > ● claude-opus-4.5          ← active model               │
+│  > ● claude-opus-4.5          ← active model                │
 │    ○ claude-sonnet-4.5                                      │
 │    ○ claude-haiku-4.5                                       │
 │    ○ gpt-4.1                                                │
@@ -191,7 +191,7 @@ Choose the AI model for all requests. The currently active model is marked with 
 │    ○ o3-mini                                                │
 │    ○ llama3-3-70b-instruct                                  │
 │                                                             │
-│  [↑↓] Navigate  [Enter] Select  [b/Esc] Back               │
+│  [↑↓] Navigate  [Enter] Select  [b/Esc] Back                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -212,13 +212,13 @@ Send a quick test message from inside the TUI — no external tool required. The
 │                                                             │
 │  You: Explain quicksort                                     │
 │                                                             │
-│  Assistant: Quicksort is a divide-and-conquer algorithm…   │
+│  Assistant: Quicksort is a divide-and-conquer algorithm…    │
 │                                                             │
-│ ╭─────────────────────────────────────────────────────╮    │
-│ │  Type a message and press Enter… █                  │    │
-│ ╰─────────────────────────────────────────────────────╯    │
+│ ╭─────────────────────────────────────────────────────╮     │
+│ │  Type a message and press Enter… █                  │     │
+│ ╰─────────────────────────────────────────────────────╯     │
 │                                                             │
-│  [Enter] Send  [b/Esc] Back                                │
+│  [Enter] Send  [b/Esc] Back                                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -244,14 +244,14 @@ Displays the live base URL and API key. Use one-key shortcuts to copy them direc
 │                                                             │
 │  Server Info                                                │
 │                                                             │
-│ ╭───────────────────────────────────────────────────╮      │
-│ │  Base URL:  http://127.0.0.1:8741                 │      │
-│ │  API Key:   jh-local-xxxxxxxxxxxxxxxxxxxxxxxx     │      │
-│ ╰───────────────────────────────────────────────────╯      │
+│ ╭───────────────────────────────────────────────────╮       │
+│ │  Base URL:  http://127.0.0.1:8741                 │       │
+│ │  API Key:   jh-local-xxxxxxxxxxxxxxxxxxxxxxxx     │       │
+│ ╰───────────────────────────────────────────────────╯       │
 │                                                             │
 │  Copied URL!                                                │
 │                                                             │
-│  [c] Copy URL    [k] Copy Key    [b/Esc] Back              │
+│  [c] Copy URL    [k] Copy Key    [b/Esc] Back               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -279,7 +279,7 @@ Edit gateway configuration inline — no config file edits needed. Navigate to a
 │    Default Model: claude-opus-4.5                           │
 │    Auth Mode:     bearer                                    │
 │                                                             │
-│  [↑↓] Navigate  [Enter] Edit  [b/Esc] Back                 │
+│  [↑↓] Navigate  [Enter] Edit  [b/Esc] Back                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 

@@ -6,6 +6,7 @@ import type { GatewayCredentials } from "../infra/types.js";
 // Mock external dependencies that TokenRefresher calls
 vi.mock("./auth-capture.js", () => ({
     captureCredentials: vi.fn(),
+    captureCredentialsActive: vi.fn(),
 }));
 
 vi.mock("../infra/config.js", () => ({
@@ -13,10 +14,10 @@ vi.mock("../infra/config.js", () => ({
 }));
 
 // Import the mocked modules so we can control their behavior
-import { captureCredentials } from "./auth-capture.js";
+import { captureCredentialsActive } from "./auth-capture.js";
 import { updateConfig } from "../infra/config.js";
 
-const mockCapture = vi.mocked(captureCredentials);
+const mockCapture = vi.mocked(captureCredentialsActive);
 const mockUpdateConfig = vi.mocked(updateConfig);
 
 describe("token-refresher", () => {

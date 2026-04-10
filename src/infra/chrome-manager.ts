@@ -181,10 +181,75 @@ export class ChromeManager {
     }
 
     /**
-     * Minimize the Chrome window via CDP Browser.setWindowBounds.
-     * This is best-effort — errors are silently caught.
+     * Show / unhide the Chrome window.
+     * On macOS: uses osascript to set the process visible again.
+     * On other platforms: restores the window via CDP.
+     * Best-effort — errors are silently caught.
      */
-    async minimizeWindow(state: ChromeManagerState): Promise<void> {
+    async showWindow(state: ChromeManagerState): Promise<void> {
+        if (process.platform === "darwin") {
+            try {
+                const pid = state.process?.pid;
+                if (pid !== undefined) {
+                    execSync(
+                        `osascript -e 'tell application "System Events" to set visible of (first process whose unix id is ${pid}) to true'`,
+                        { stdio: "pipe" },
+                    );
+                } else {
+                    execSync(
+                        `osascript -e 'tell application "System Events" to set visible of process "Google Chrome" to true'`,
+                        { stdio: "pipe" },
+                    );
+                }
+                return;
+            } catch {
+                // Fall back to CDP restore
+            }
+        }
+        try {
+            const page = state.browser.contexts()[0]?.pages()[0];
+            if (!page) return;
+
+            const cdpSession = await page.context().newCDPSession(page);
+            const { windowId } = (await cdpSession.send(
+                "Browser.getWindowForTarget",
+            )) as { windowId: number };
+            await cdpSession.send("Browser.setWindowBounds", {
+                windowId,
+                bounds: { windowState: "normal" },
+            });
+        } catch {
+            // Best-effort — silently ignore errors
+        }
+    }
+
+    /**
+     * Hide the Chrome window.
+     * On macOS: uses osascript to fully hide the window (equivalent to Cmd+H),
+     * so it does not appear in the Dock as a minimized tile.
+     * On other platforms: falls back to CDP minimize.
+     * Best-effort — errors are silently caught.
+     */
+    async hideWindow(state: ChromeManagerState): Promise<void> {
+        if (process.platform === "darwin") {
+            try {
+                const pid = state.process?.pid;
+                if (pid !== undefined) {
+                    execSync(
+                        `osascript -e 'tell application "System Events" to set visible of (first process whose unix id is ${pid}) to false'`,
+                        { stdio: "pipe" },
+                    );
+                } else {
+                    execSync(
+                        `osascript -e 'tell application "System Events" to set visible of process "Google Chrome" to false'`,
+                        { stdio: "pipe" },
+                    );
+                }
+                return;
+            } catch {
+                // Fall back to CDP minimize
+            }
+        }
         try {
             const page = state.browser.contexts()[0]?.pages()[0];
             if (!page) return;
@@ -198,7 +263,7 @@ export class ChromeManager {
                 bounds: { windowState: "minimized" },
             });
         } catch {
-            // Minimizing is best-effort — silently ignore errors
+            // Best-effort — silently ignore errors
         }
     }
 

@@ -74,6 +74,23 @@ export async function connectToChrome(
 }
 
 /**
+ * Check whether an existing browser page is still on chat.ai.jh.edu.
+ * This is a **read-only** check — it does NOT navigate or open new tabs.
+ * Returns true if at least one page URL contains "chat.ai.jh.edu",
+ * false if no such page exists or all JH pages have redirected away.
+ */
+export async function checkBrowserLoginState(browser: Browser): Promise<boolean> {
+  for (const context of browser.contexts()) {
+    for (const page of context.pages()) {
+      if (page.url().includes("chat.ai.jh.edu")) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Find an existing chat.ai.jh.edu page across all contexts, or open a new one.
  */
 export async function findOrOpenJhPage(browser: Browser): Promise<Page> {

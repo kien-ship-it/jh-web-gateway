@@ -7,7 +7,7 @@ import * as p from "@clack/prompts";
 import { loadConfig, updateConfig } from "../infra/config.js";
 import { ChromeManager } from "../infra/chrome-manager.js";
 import type { ChromeManagerState } from "../infra/chrome-manager.js";
-import { findOrOpenJhPage } from "../infra/chrome-cdp.js";
+import { findOrOpenJhPage, checkBrowserLoginState } from "../infra/chrome-cdp.js";
 import { captureCredentials, getTokenExpiry } from "../core/auth-capture.js";
 import { shouldRefresh, CredentialHolder, TokenRefresher } from "../core/token-refresher.js";
 import { ReauthLock } from "../core/reauth-lock.js";
@@ -49,6 +49,7 @@ export async function runStart(options: StartOptions): Promise<void> {
                 ? "Chrome launched and connected."
                 : "Connected to existing Chrome instance.",
         );
+        await chromeManager.showWindow(state);
     } catch (err) {
         s.stop("Failed to connect to Chrome.");
         throw err;
@@ -71,10 +72,6 @@ export async function runStart(options: StartOptions): Promise<void> {
     if (needsAuth) {
         s.start("Waiting for login (timeout: 300s)...");
         try {
-            // Navigate to JH login page
-            await findOrOpenJhPage(state.browser);
-
-            // Capture credentials with 300s timeout
             const creds = await captureCredentials(config.cdpUrl, 300_000);
             config.credentials = {
                 bearerToken: creds.bearerToken,
@@ -82,9 +79,6 @@ export async function runStart(options: StartOptions): Promise<void> {
                 userAgent: creds.userAgent,
                 expiresAt: creds.expiresAt,
             };
-
-            // Minimize Chrome window after successful auth
-            await chromeManager.minimizeWindow(state);
 
             const expiryStr = creds.expiresAt
                 ? new Date(creds.expiresAt * 1000).toLocaleString()
@@ -97,7 +91,31 @@ export async function runStart(options: StartOptions): Promise<void> {
             throw err;
         }
     } else {
-        p.log.info("Valid credentials found, skipping login.");
+        p.log.info("Valid credentials found. Verifying browser session…");
+        const browserLoggedIn = await checkBrowserLoginState(state.browser);
+        if (!browserLoggedIn) {
+            p.log.warn(
+                "Browser session has expired — please log in to chat.ai.jh.edu.",
+            );
+            s.start("Waiting for login (timeout: 300s)…");
+            try {
+                const creds = await captureCredentials(config.cdpUrl, 300_000);
+                config.credentials = {
+                    bearerToken: creds.bearerToken,
+                    cookie: creds.cookie,
+                    userAgent: creds.userAgent,
+                    expiresAt: creds.expiresAt,
+                };
+                const expiryStr = creds.expiresAt
+                    ? new Date(creds.expiresAt * 1000).toLocaleString()
+                    : "unknown";
+                s.stop(`Credentials re-captured. Token expires: ${expiryStr}`);
+            } catch (err) {
+                s.stop("Re-authentication failed.");
+                await chromeManager.shutdown(state);
+                throw err;
+            }
+        }
     }
 
     // ── Phase 3: Initialize PagePool, CredentialHolder, ReauthLock, Server
@@ -144,6 +162,7 @@ export async function runStart(options: StartOptions): Promise<void> {
     const shutdown = async () => {
         tokenRefresher.stop();
         await serverHandle.close();
+        await chromeManager.hideWindow(state);
         await chromeManager.shutdown(state);
     };
 
