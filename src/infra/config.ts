@@ -209,6 +209,10 @@ async function enforceConfigPermissions(
   configPath: string,
   configDir: string
 ): Promise<void> {
-  await chmod(configDir, 0o700).catch(() => {});
-  await chmod(configPath, 0o600).catch(() => {});
+  await chmod(configDir, 0o700).catch(() => {
+    // Best-effort: some filesystems/platforms may not support chmod semantics.
+  });
+  await chmod(configPath, 0o600).catch(() => {
+    // Best-effort: some filesystems/platforms may not support chmod semantics.
+  });
 }

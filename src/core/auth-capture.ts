@@ -5,6 +5,14 @@ import type { CapturedCredentials } from "../infra/types.js";
 
 const JH_HOST = "chat.ai.jh.edu";
 
+function isJhUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname === JH_HOST;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Decode the JWT `exp` claim from the middle (payload) segment.
  * Returns 0 if decoding fails for any reason.
@@ -78,7 +86,7 @@ export async function captureCredentials(
       if (
         !settled &&
         authHeader.startsWith("Bearer ") &&
-        request.url().includes(JH_HOST)
+        isJhUrl(request.url())
       ) {
         try {
           const bearerToken = authHeader.slice("Bearer ".length).trim();
@@ -113,14 +121,18 @@ export async function captureCredentials(
       }
 
       // Always continue so the browser request is not blocked.
-      await route.continue().catch(() => {});
+      await route.continue().catch(() => {
+        // Best-effort: request may already be handled/aborted during teardown.
+      });
     };
 
     const cleanup = async (): Promise<void> => {
       if (cleanedUp) return;
       cleanedUp = true;
       clearTimeout(timer);
-      await targetPage.unroute(routePattern, routeHandler).catch(() => {});
+      await targetPage.unroute(routePattern, routeHandler).catch(() => {
+        // Best-effort: page may be closing or route already removed.
+      });
     };
 
     const settleSuccess = (captured: CapturedCredentials): void => {
@@ -152,7 +164,7 @@ export async function captureCredentials(
       .then(() => {
         if (settled) return;
         // Route registered — now navigate to trigger auth requests.
-        if (!targetPage.url().includes(JH_HOST)) {
+        if (!isJhUrl(targetPage.url())) {
           targetPage.goto(`https://${JH_HOST}`, { waitUntil: "commit" }).catch(() => {});
         } else {
           // Already on JH — reload to trigger fresh API calls.
@@ -211,7 +223,7 @@ export async function captureCredentialsActive(
           if (
             !settled &&
             authHeader.startsWith("Bearer ") &&
-            request.url().includes(JH_HOST)
+            isJhUrl(request.url())
           ) {
             settled = true;
             clearTimeout(timer);
