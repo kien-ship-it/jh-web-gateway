@@ -209,10 +209,14 @@ async function enforceConfigPermissions(
   configPath: string,
   configDir: string
 ): Promise<void> {
-  await chmod(configDir, 0o700).catch(() => {
+  await chmod(configDir, 0o700).catch((err: unknown) => {
     // Best-effort: some filesystems/platforms may not support chmod semantics.
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[config] Could not enforce secure directory permissions: ${message}`);
   });
-  await chmod(configPath, 0o600).catch(() => {
+  await chmod(configPath, 0o600).catch((err: unknown) => {
     // Best-effort: some filesystems/platforms may not support chmod semantics.
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[config] Could not enforce secure file permissions: ${message}`);
   });
 }

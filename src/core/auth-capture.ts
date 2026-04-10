@@ -121,8 +121,10 @@ export async function captureCredentials(
       }
 
       // Always continue so the browser request is not blocked.
-      await route.continue().catch(() => {
+      await route.continue().catch((err: unknown) => {
         // Best-effort: request may already be handled/aborted during teardown.
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[auth-capture] Route continuation failed: ${message}`);
       });
     };
 
@@ -130,8 +132,10 @@ export async function captureCredentials(
       if (cleanedUp) return;
       cleanedUp = true;
       clearTimeout(timer);
-      await targetPage.unroute(routePattern, routeHandler).catch(() => {
+      await targetPage.unroute(routePattern, routeHandler).catch((err: unknown) => {
         // Best-effort: page may be closing or route already removed.
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[auth-capture] Route cleanup failed: ${message}`);
       });
     };
 
