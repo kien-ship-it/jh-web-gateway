@@ -7,20 +7,13 @@ import type { ParsedToolCall, ParsedContent, ToolCall } from "../infra/types.js"
 const TOOL_CALL_RE =
   /<tool_call\s+(?=[^>]*\bid="([^"]*)")(?=[^>]*\bname="([^"]*)")(?:[^>]*)>([\s\S]*?)<\/tool_call>/g;
 
-// Match <tool_response> tags — these are echoed prompt content that must be stripped.
-const TOOL_RESPONSE_RE = /<tool_response\b[^>]*>[\s\S]*?<\/tool_response>/g;
-
 const THINK_RE = /<think>([\s\S]*?)<\/think>/g;
 
 // Detects an opening <tool_call that never closes — used for malformed detection
 const PARTIAL_TOOL_CALL_RE = /<tool_call\b[^>]*>(?:(?!<\/tool_call>)[\s\S])*$/;
 
-// Detects an opening <tool_response that never closes
-const PARTIAL_TOOL_RESPONSE_RE = /<tool_response\b[^>]*>(?:(?!<\/tool_response>)[\s\S])*$/;
-
 /**
  * Parse response text, extracting `<tool_call>` and `<think>` tags.
- * Strips `<tool_response>` tags (echoed prompt content).
  * Malformed XML is emitted as raw text (never throws).
  */
 export function parseToolsAndThinking(text: string): ParsedContent {
@@ -35,9 +28,6 @@ export function parseToolsAndThinking(text: string): ParsedContent {
 
   // Remove think tags from text for further processing
   let remaining = text.replace(THINK_RE, "");
-
-  // Remove tool_response tags (echoed prompt content — must not appear in output)
-  remaining = remaining.replace(TOOL_RESPONSE_RE, "");
 
   // Extract well-formed tool_call tags
   const toolMatches = [...remaining.matchAll(TOOL_CALL_RE)];
@@ -98,75 +88,39 @@ export function toToolCallXml(calls: ParsedToolCall[]): string {
 
 // ── Streaming buffer support ──────────────────────────────────────────────────
 
-// Both "<tool_call" and "<tool_response" share the prefix "<tool_".
-// We need to hold back any text ending with a prefix of either tag.
-const WATCHED_TAGS = ["<tool_call", "<tool_response"] as const;
-
-// The longest watched tag prefix we need to detect
-const MAX_TAG_PREFIX_LEN = Math.max(...WATCHED_TAGS.map((t) => t.length));
+// Each suffix of "<tool_call" is a potential prefix the model might be building.
+// We pre-compute them so we can hold back text that ends with any of these.
+const TOOL_CALL_TAG = "<tool_call";
+const TAG_PREFIXES: string[] = [];
+for (let i = 1; i <= TOOL_CALL_TAG.length; i++) {
+  TAG_PREFIXES.push(TOOL_CALL_TAG.slice(0, i));
+}
 
 /**
- * Find the start index of a potential watched-tag prefix at the end of `text`.
- * Returns -1 if no suffix of `text` is a prefix of any watched tag.
+ * Find the start index of a potential `<tool_call` prefix at the end of `text`.
+ * Returns -1 if no suffix of `text` is a prefix of "<tool_call".
  */
-function findWatchedTagPrefixAtEnd(text: string): number {
-  const maxLen = Math.min(text.length, MAX_TAG_PREFIX_LEN);
+function findTagPrefixAtEnd(text: string): number {
+  // Check longest possible prefix first (up to "<tool_call".length)
+  const maxLen = Math.min(text.length, TOOL_CALL_TAG.length);
   for (let len = maxLen; len >= 1; len--) {
     const tail = text.slice(-len);
-    for (const tag of WATCHED_TAGS) {
-      if (tag.startsWith(tail)) {
-        return text.length - len;
-      }
+    if (TOOL_CALL_TAG.startsWith(tail)) {
+      return text.length - len;
     }
   }
   return -1;
 }
 
 /**
- * Check if text contains a partial (unclosed) watched tag.
- * Returns the index of the partial tag start, or -1 if none found.
- */
-function findPartialWatchedTag(text: string): number {
-  // Check for partial <tool_response (opened but not closed)
-  if (PARTIAL_TOOL_RESPONSE_RE.test(text)) {
-    const idx = text.search(/<tool_response\b/);
-    if (idx >= 0) return idx;
-  }
-  // Check for partial <tool_call (opened but not closed)
-  if (PARTIAL_TOOL_CALL_RE.test(text)) {
-    const idx = text.search(/<tool_call\b/);
-    if (idx >= 0) return idx;
-  }
-  return -1;
-}
-
-/**
- * Check if text contains a watched tag keyword that hasn't been closed with >.
- * Returns the index, or -1.
- */
-function findUnclosedWatchedTag(text: string): number {
-  for (const tag of WATCHED_TAGS) {
-    const idx = text.lastIndexOf(tag);
-    if (idx >= 0) {
-      const afterTag = text.slice(idx);
-      if (!afterTag.includes(">")) {
-        return idx;
-      }
-    }
-  }
-  return -1;
-}
-
-/**
- * Streaming XML buffer that holds partial `<tool_call>` and `<tool_response>`
- * content until complete closing tag boundaries are found.
+ * Streaming XML buffer that holds partial `<tool_call>` content until a
+ * complete closing tag boundary is found.
  *
- * - `<tool_call>` tags are extracted as structured ParsedToolCall objects
- * - `<tool_response>` tags are silently dropped (echoed prompt content)
- * - All other text is emitted as safe content
+ * Feed chunks via `push()`. Completed tool calls are returned; any buffered
+ * partial content is held until the closing tag arrives.
  *
- * Handles three levels of partial state for both tag types:
- * 1. Suffix of text is a prefix of a watched tag (e.g. "<tool", "<tool_r")
+ * Handles three levels of partial state:
+ * 1. Suffix of text is a prefix of "<tool_call" (e.g. "<tool", "<to")
  * 2. Opening tag started but not closed: `<tool_call id="...` (no `>` yet)
  * 3. Opening tag closed but body not closed: `<tool_call ...>args` (no `</tool_call>`)
  */
@@ -175,7 +129,7 @@ export class StreamingToolBuffer {
 
   /**
    * Push a text chunk. Returns an object with:
-   * - `text`: safe-to-emit text (outside any partial/complete tag)
+   * - `text`: safe-to-emit text (outside any partial tag)
    * - `completedCalls`: fully parsed tool calls from this chunk
    */
   push(chunk: string): { text: string; completedCalls: ParsedToolCall[] } {
@@ -184,19 +138,13 @@ export class StreamingToolBuffer {
     const completedCalls: ParsedToolCall[] = [];
     let safeText = "";
 
-    // Phase 1: Extract and remove all complete <tool_response> tags (drop them)
-    this.buffer = this.buffer.replace(TOOL_RESPONSE_RE, (match, offset) => {
-      // Text before this match that hasn't been accounted for will be
-      // handled by the tool_call extraction below
-      return ""; // silently drop
-    });
-
-    // Phase 2: Extract all complete <tool_call> tags
+    // Extract all complete tool_call tags
     let match: RegExpExecArray | null;
     const re = new RegExp(TOOL_CALL_RE.source, "g");
 
     let lastIndex = 0;
     while ((match = re.exec(this.buffer)) !== null) {
+      // Text before this match is safe to emit
       safeText += this.buffer.slice(lastIndex, match.index);
 
       const id = match[1];
@@ -218,34 +166,42 @@ export class StreamingToolBuffer {
     // Remaining buffer after all complete matches
     const remainder = this.buffer.slice(lastIndex);
 
-    // Phase 3: Check for partial state at three levels
-
-    // Level 3: Full opening tag present but body not closed
-    const partialIdx = findPartialWatchedTag(remainder);
-    if (partialIdx >= 0) {
-      if (partialIdx > 0) {
-        safeText += remainder.slice(0, partialIdx);
+    // Check for partial state at three levels:
+    // Level 3: Full opening tag present but no </tool_call> yet
+    if (PARTIAL_TOOL_CALL_RE.test(remainder)) {
+      const partialStart = remainder.search(/<tool_call\b/);
+      if (partialStart > 0) {
+        safeText += remainder.slice(0, partialStart);
       }
-      this.buffer = remainder.slice(partialIdx);
+      this.buffer = partialStart >= 0 ? remainder.slice(partialStart) : remainder;
     }
-    // Level 2: Tag keyword present but opening tag not closed (no > yet)
-    else {
-      const unclosedIdx = findUnclosedWatchedTag(remainder);
-      if (unclosedIdx >= 0) {
-        safeText += remainder.slice(0, unclosedIdx);
-        this.buffer = remainder.slice(unclosedIdx);
+    // Level 2: "<tool_call" present but opening tag not closed (no > yet)
+    else if (remainder.includes(TOOL_CALL_TAG)) {
+      const idx = remainder.lastIndexOf(TOOL_CALL_TAG);
+      // Check if there's a closing > after this tag start
+      const afterTag = remainder.slice(idx);
+      if (!afterTag.includes(">")) {
+        // Opening tag still building — hold it
+        safeText += remainder.slice(0, idx);
+        this.buffer = remainder.slice(idx);
+      } else {
+        // Has > but no </tool_call> and didn't match PARTIAL_TOOL_CALL_RE
+        // This means it's malformed — emit as text
+        safeText += remainder;
+        this.buffer = "";
       }
-      // Level 1: End of text might be the start of a watched tag
-      else {
-        const prefixStart = findWatchedTagPrefixAtEnd(remainder);
-        if (prefixStart >= 0) {
-          safeText += remainder.slice(0, prefixStart);
-          this.buffer = remainder.slice(prefixStart);
-        } else {
-          // No partial tag at all — emit everything
-          safeText += remainder;
-          this.buffer = "";
-        }
+    }
+    // Level 1: End of text might be the start of "<tool_call"
+    else {
+      const prefixStart = findTagPrefixAtEnd(remainder);
+      if (prefixStart >= 0) {
+        // Hold back the potential prefix, emit everything before it
+        safeText += remainder.slice(0, prefixStart);
+        this.buffer = remainder.slice(prefixStart);
+      } else {
+        // No partial tag at all — emit everything
+        safeText += remainder;
+        this.buffer = "";
       }
     }
 
