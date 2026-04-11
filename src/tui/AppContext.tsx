@@ -5,6 +5,8 @@ import type { TuiAppState, PanelId } from "./types.js";
 import type { ChromeManagerState } from "../infra/chrome-manager.js";
 import type { TokenRefresher } from "../core/token-refresher.js";
 import type { ServerHandle } from "../server.js";
+import type { RequestActivityTracker } from "../core/request-activity-tracker.js";
+import type { RequestQueue } from "../core/request-queue.js";
 
 // ── Context value type ─────────────────────────────────────────────────────────
 
@@ -18,6 +20,8 @@ interface AppContextValue {
   setChromeState: (state: ChromeManagerState | null) => void;
   setTokenRefresher: (refresher: TokenRefresher | null) => void;
   setConfig: (config: GatewayConfig) => void;
+  setRequestTracker: (tracker: RequestActivityTracker | null) => void;
+  setRequestQueue: (queue: RequestQueue | null) => void;
 }
 
 // ── Default/initial state ──────────────────────────────────────────────────────
@@ -41,6 +45,8 @@ const initialState: TuiAppState = {
   serverHandle: null,
   chromeState: null,
   tokenRefresher: null,
+  requestTracker: null,
+  requestQueue: null,
 };
 
 // ── Context ────────────────────────────────────────────────────────────────────
@@ -102,6 +108,14 @@ export function AppProvider({ children }: AppProviderProps): React.ReactElement 
     setState((prev) => ({ ...prev, config }));
   };
 
+  const setRequestTracker = (requestTracker: RequestActivityTracker | null): void => {
+    setState((prev) => ({ ...prev, requestTracker }));
+  };
+
+  const setRequestQueue = (requestQueue: RequestQueue | null): void => {
+    setState((prev) => ({ ...prev, requestQueue }));
+  };
+
   const value: AppContextValue = {
     state,
     navigate,
@@ -112,6 +126,8 @@ export function AppProvider({ children }: AppProviderProps): React.ReactElement 
     setChromeState,
     setTokenRefresher,
     setConfig,
+    setRequestTracker,
+    setRequestQueue,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

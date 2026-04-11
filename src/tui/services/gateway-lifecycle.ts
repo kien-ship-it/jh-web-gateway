@@ -4,9 +4,11 @@ import { findOrOpenJhPage, checkBrowserLoginState } from "../../infra/chrome-cdp
 import { captureCredentials } from "../../core/auth-capture.js";
 import { shouldRefresh, CredentialHolder, TokenRefresher } from "../../core/token-refresher.js";
 import { PagePool } from "../../core/page-pool.js";
+import { RequestActivityTracker } from "../../core/request-activity-tracker.js";
 import { startServer } from "../../server.js";
 import type { ServerHandle } from "../../server.js";
 import type { GatewayConfig } from "../../infra/types.js";
+import type { RequestQueue } from "../../core/request-queue.js";
 
 export interface GatewayLifecycleCallbacks {
   onPhase: (phase: string) => void;
@@ -18,6 +20,8 @@ export interface StartGatewayResult {
   serverHandle: ServerHandle;
   chromeState: ChromeManagerState;
   tokenRefresher: TokenRefresher;
+  tracker: RequestActivityTracker;
+  requestQueue: RequestQueue;
 }
 
 export async function startGatewayForTui(
@@ -100,6 +104,12 @@ export async function startGatewayForTui(
     });
     await pool.init(state.browser, seedPage);
 
+    // Grab the RequestQueue reference from the pool (single-page default)
+    const { queue: requestQueue, release } = await pool.acquire();
+    release();
+
+    const tracker = new RequestActivityTracker();
+
     const credentialHolder = new CredentialHolder();
     if (config.credentials) {
       credentialHolder.set(config.credentials);
@@ -108,6 +118,7 @@ export async function startGatewayForTui(
     const serverHandle = await startServer(config, {
       getPool: () => pool,
       getCredentials: () => credentialHolder.get(),
+      requestTracker: tracker,
     });
 
     const tokenRefresher = new TokenRefresher(credentialHolder, config.cdpUrl);
@@ -117,7 +128,7 @@ export async function startGatewayForTui(
     const apiKey = config.auth.token ?? null;
     callbacks.onSuccess({ baseUrl, apiKey });
 
-    return { serverHandle, chromeState: state, tokenRefresher };
+    return { serverHandle, chromeState: state, tokenRefresher, tracker, requestQueue };
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     callbacks.onError(error);
@@ -130,8 +141,10 @@ export async function stopGateway(
   serverHandle: ServerHandle,
   chromeState: ChromeManagerState,
   tokenRefresher: TokenRefresher,
+  tracker?: RequestActivityTracker,
 ): Promise<void> {
   tokenRefresher.stop();
+  if (tracker) tracker.clear();
   await serverHandle.close();
 
   // disconnect (not shutdown): hides Chrome and detaches CDP, but keeps

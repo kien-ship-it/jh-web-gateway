@@ -30,6 +30,13 @@ export function ChatPanel(): React.ReactElement {
   });
   const [confirmationModel, setConfirmationModel] = useState<string | null>(null);
 
+  // Blinking cursor
+  const [cursorVisible, setCursorVisible] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => setCursorVisible((v) => !v), 530);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     if (confirmationModel !== null) {
       const timer = setTimeout(() => setConfirmationModel(null), 1500);
@@ -121,7 +128,7 @@ export function ChatPanel(): React.ReactElement {
         setActiveModel(selected);
         setConfirmationModel(selected);
         setShowModelPicker(false);
-      } else if (key.escape || _input === "m") {
+      } else if (key.escape) {
         setShowModelPicker(false);
       }
       return;
@@ -139,9 +146,15 @@ export function ChatPanel(): React.ReactElement {
       return;
     }
 
-    // Toggle model picker with 'm' when not typing
-    if (_input === "m" && input.length === 0 && !loading) {
+    // Arrow keys open the model picker
+    if ((key.upArrow || key.downArrow) && !loading) {
       setShowModelPicker(true);
+      // Also move in the direction pressed
+      if (key.upArrow) {
+        setModelFocusIndex((i) => wrapIndex(i, -1, MODELS.length));
+      } else {
+        setModelFocusIndex((i) => wrapIndex(i, 1, MODELS.length));
+      }
       return;
     }
 
@@ -189,7 +202,7 @@ export function ChatPanel(): React.ReactElement {
           <Text color="green">  ✓ Switched!</Text>
         )}
         {!showModelPicker && (
-          <Text dimColor>  [m] change</Text>
+          <Text dimColor>  [↑↓] change</Text>
         )}
       </Box>
 
@@ -248,13 +261,15 @@ export function ChatPanel(): React.ReactElement {
         <>
           <Box borderStyle="round" borderColor="gray" paddingX={1}>
             <Text>
-              {input.length > 0 ? input : <Text dimColor>Type a message and press Enter…</Text>}
-              <Text color="cyan">█</Text>
+              {input.length > 0
+                ? <>{input}<Text color="cyan">{cursorVisible ? "█" : " "}</Text></>
+                : <><Text color="cyan">{cursorVisible ? "█" : " "}</Text><Text dimColor>Type a message and press Enter…</Text></>
+              }
             </Text>
           </Box>
 
           <Box marginTop={1}>
-            <Text dimColor>[Enter] Send  [m] Model  [Esc] Back</Text>
+            <Text dimColor>[Enter] Send  [↑↓] Model  [Esc] Back</Text>
           </Box>
         </>
       )}

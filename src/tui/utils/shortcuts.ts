@@ -16,7 +16,7 @@ export const PANEL_SHORTCUTS: Record<PanelId, FooterShortcut[]> = {
   ],
   chat: [
     { key: "Enter", label: "Send" },
-    { key: "m", label: "Model" },
+    { key: "↑↓", label: "Model" },
     { key: "Esc", label: "Back" },
     { key: "q", label: "Quit" },
   ],

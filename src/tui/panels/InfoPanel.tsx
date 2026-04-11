@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import { useAppContext } from "../AppContext.js";
 import { copyToClipboard } from "../utils/clipboard.js";
+import { RequestTracker } from "../components/RequestTracker.js";
 
 export function InfoPanel(): React.ReactElement {
   const { state, navigate } = useAppContext();
@@ -107,6 +108,10 @@ export function InfoPanel(): React.ReactElement {
           <Text color={flash.startsWith("Copied") ? "green" : "yellow"}>{flash}</Text>
         </Box>
       )}
+
+      <Box marginBottom={1}>
+        <RequestTracker />
+      </Box>
 
       <Box>
         <Text dimColor>[c] Copy URL  {apiKey ? "[k] Copy Key  " : ""}[b/Esc] Back</Text>

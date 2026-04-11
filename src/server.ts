@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import { serve } from "@hono/node-server";
 import { modelsRouter } from "./routes/models.js";
 import { healthRouter } from "./routes/health.js";
@@ -8,18 +9,51 @@ import { Logger } from "./infra/logger.js";
 import type { PagePool } from "./core/page-pool.js";
 import type { GatewayConfig, GatewayCredentials, RequestLogEntry } from "./infra/types.js";
 import type { ReauthLock } from "./core/reauth-lock.js";
+import type { RequestActivityTracker } from "./core/request-activity-tracker.js";
+
+/** Hono environment type that exposes requestId on the context. */
+export type AppEnv = {
+  Variables: {
+    requestId: string;
+  };
+};
 
 export interface ServerDeps {
   getPool: () => PagePool | null;
   getCredentials: () => GatewayConfig["credentials"];
   reauthLock?: ReauthLock;
   setCredentials?: (creds: GatewayCredentials) => void;
+  requestTracker?: RequestActivityTracker;
 }
 
-export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono {
-  const app = new Hono();
+/**
+ * Middleware that assigns a UUID to each request and records lifecycle
+ * events (start / end) on the provided RequestActivityTracker.
+ */
+export function requestTrackerMiddleware(tracker: RequestActivityTracker) {
+  return async (c: Context<AppEnv>, next: Next) => {
+    const id = crypto.randomUUID();
+    c.set("requestId", id);
+    tracker.start(id, c.req.method, c.req.path);
+    try {
+      await next();
+      tracker.end(id, c.res.status);
+    } catch (err) {
+      tracker.end(id, 500);
+      throw err;
+    }
+  };
+}
+
+export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
   const startTime = Date.now();
   const logger = new Logger();
+
+  // Request tracker middleware — must be first so every request gets an ID
+  if (deps?.requestTracker) {
+    app.use("*", requestTrackerMiddleware(deps.requestTracker));
+  }
 
   // Auth middleware on /v1/* routes
   app.use("/v1/*", authMiddleware(config));

@@ -2,6 +2,8 @@ import type { GatewayConfig } from "../infra/types.js";
 import type { ChromeManagerState } from "../infra/chrome-manager.js";
 import type { TokenRefresher } from "../core/token-refresher.js";
 import type { ServerHandle } from "../server.js";
+import type { RequestActivityTracker } from "../core/request-activity-tracker.js";
+import type { RequestQueue } from "../core/request-queue.js";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
@@ -18,6 +20,8 @@ export interface TuiAppState {
   serverHandle: ServerHandle | null;
   chromeState: ChromeManagerState | null;
   tokenRefresher: TokenRefresher | null;
+  requestTracker: RequestActivityTracker | null;
+  requestQueue: RequestQueue | null;
 }
 
 // ── Menu ──────────────────────────────────────────────────────────────────────

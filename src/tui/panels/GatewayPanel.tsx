@@ -9,23 +9,23 @@ const PHASE_LABELS = ["Connecting to Chrome", "Waiting for login", "Starting ser
 function phaseIcon(status: GatewayPhase["status"]): string {
   switch (status) {
     case "pending": return "○";
-    case "active":  return "◌";
-    case "done":    return "●";
-    case "error":   return "✗";
+    case "active": return "◌";
+    case "done": return "●";
+    case "error": return "✗";
   }
 }
 
 function phaseColor(status: GatewayPhase["status"]): string | undefined {
   switch (status) {
-    case "done":    return "green";
-    case "active":  return "cyan";
-    case "error":   return "red";
-    default:        return "gray";
+    case "done": return "green";
+    case "active": return "cyan";
+    case "error": return "red";
+    default: return "gray";
   }
 }
 
 export function GatewayPanel(): React.ReactElement {
-  const { state, navigate, setGatewayStatus, setGatewayError, setServerHandle, setChromeState, setTokenRefresher } = useAppContext();
+  const { state, navigate, setGatewayStatus, setGatewayError, setServerHandle, setChromeState, setTokenRefresher, setRequestTracker, setRequestQueue } = useAppContext();
   const { gatewayStatus, gatewayError, config, serverHandle, chromeState, tokenRefresher } = state;
 
   const [phases, setPhases] = useState<GatewayPhase[]>([]);
@@ -83,6 +83,8 @@ export function GatewayPanel(): React.ReactElement {
       setServerHandle(result.serverHandle);
       setChromeState(result.chromeState);
       setTokenRefresher(result.tokenRefresher);
+      setRequestTracker(result.tracker);
+      setRequestQueue(result.requestQueue);
       setGatewayStatus("running");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -91,23 +93,25 @@ export function GatewayPanel(): React.ReactElement {
     } finally {
       setStarting(false);
     }
-  }, [starting, stopping, config, setGatewayStatus, setGatewayError, setServerHandle, setChromeState, setTokenRefresher]);
+  }, [starting, stopping, config, setGatewayStatus, setGatewayError, setServerHandle, setChromeState, setTokenRefresher, setRequestTracker, setRequestQueue]);
 
   const handleStop = useCallback(async () => {
     if (stopping || starting || !serverHandle || !chromeState || !tokenRefresher) return;
     setStopping(true);
     try {
-      await stopGateway(serverHandle, chromeState, tokenRefresher);
+      await stopGateway(serverHandle, chromeState, tokenRefresher, state.requestTracker ?? undefined);
       setServerHandle(null);
       setChromeState(null);
       setTokenRefresher(null);
+      setRequestTracker(null);
+      setRequestQueue(null);
       setGatewayStatus("stopped");
       setGatewayError(null);
       setPhases([]);
     } finally {
       setStopping(false);
     }
-  }, [stopping, starting, serverHandle, chromeState, tokenRefresher, setGatewayStatus, setGatewayError, setServerHandle, setChromeState, setTokenRefresher]);
+  }, [stopping, starting, serverHandle, chromeState, tokenRefresher, state.requestTracker, setGatewayStatus, setGatewayError, setServerHandle, setChromeState, setTokenRefresher, setRequestTracker, setRequestQueue]);
 
   useInput((_input, key) => {
     if (key.return) {

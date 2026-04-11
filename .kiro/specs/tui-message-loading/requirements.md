@@ -2,23 +2,25 @@
 
 ## Introduction
 
-The TUI Server Activity Tracker feature adds real-time visibility into all HTTP requests hitting the jh-gateway server. Currently, the TUI has no live view of server activity — all API endpoints (models, health, chat completions from external clients) are invisible to the TUI user. This feature introduces a server-level request tracker embedded in the Gateway Panel that displays an animated loading indicator for in-flight requests, a live queue depth counter reflecting all queued server tasks, and per-request response timing. The tracker surfaces activity across every API endpoint, turning the gateway from a black box into a transparent, observable system directly within the server tab. The Chat Panel is not modified by this feature.
+The TUI Server Activity Tracker feature adds real-time visibility into all HTTP requests hitting the jh-gateway server. Currently, the TUI has no live view of server activity — all API endpoints (models, health, chat completions from external clients) are invisible to the TUI user. This feature introduces a server-level request tracker embedded in the Info Panel (server info tab) that displays an animated loading indicator for in-flight requests, a live queue depth counter reflecting all queued server tasks, and per-request response timing. When a single incoming HTTP request triggers multiple queued sub-requests through the Request_Queue, those sub-requests are grouped under the parent request for clear visibility into internal processing. The tracker surfaces activity across every API endpoint, turning the gateway from a black box into a transparent, observable system directly within the server info tab. The Chat Panel is not modified by this feature.
 
 ## Glossary
 
 - **TUI_App**: The top-level terminal user interface application that owns the screen and input loop.
 - **Gateway_Server**: The local HTTP server (`src/server.ts`) running on the configured port, handling all OpenAI-compatible API requests across all routes (`/v1/chat/completions`, `/v1/models`, `/health`, etc.).
-- **Request_Tracker**: A TUI component that displays real-time server activity including in-flight requests, queue depth, and per-request timing for all HTTP requests handled by the Gateway_Server.
+- **Request_Tracker**: A TUI component displayed in the Info_Panel that shows real-time server activity including in-flight requests, queue depth, parent/child request grouping, and per-request timing for all HTTP requests handled by the Gateway_Server. The Request_Tracker has a fixed height and scrolls internally when entries exceed the visible area.
 - **Request_Queue**: The existing `RequestQueue` class (`src/core/request-queue.ts`) that serializes async tasks with a FIFO promise queue.
 - **Active_Request**: An HTTP request currently being processed by the Gateway_Server (received but not yet responded to).
 - **Request_Entry**: A single row in the Request_Tracker representing one HTTP request, showing its method, path, status, and elapsed time.
+- **Parent_Request**: An incoming HTTP request to the Gateway_Server that triggers one or more Sub_Requests through the Request_Queue during its processing.
+- **Sub_Request**: An internal task enqueued in the Request_Queue as a result of processing a Parent_Request. Sub_Requests are displayed as indented children under the Parent_Request in the Request_Tracker.
 - **Loading_Indicator**: An animated visual element displayed in the Request_Tracker for each Active_Request to convey ongoing processing.
 - **Queue_Depth_Display**: A UI element in the Request_Tracker that shows the current number of tasks waiting in the Request_Queue.
 - **Response_Timer**: A per-request timer that tracks and displays the elapsed wall-clock time from request receipt to response completion.
 - **App_Context**: The React context (`AppContext.tsx`) that holds shared TUI application state.
 - **Elapsed_Time**: The wall-clock duration in milliseconds between when the Gateway_Server receives a request and when the response is fully sent.
 - **Queue_Depth**: The number of tasks currently waiting in the Request_Queue (not including the actively executing task).
-- **Gateway_Panel**: The existing TUI panel (`GatewayPanel.tsx`) that controls starting and stopping the Gateway_Server.
+- **Info_Panel**: The existing TUI panel (`InfoPanel.tsx`) that displays server info including the base URL, API key, and gateway status.
 - **Request_Log_Entry**: The existing `RequestLogEntry` type (`src/infra/types.ts`) that captures method, path, status code, latency, and token estimates for each request.
 
 ---
@@ -91,22 +93,39 @@ The TUI Server Activity Tracker feature adds real-time visibility into all HTTP 
 1. THE Gateway_Server SHALL emit or expose request lifecycle events (request received, response sent) that include the HTTP method, path, status code, and Elapsed_Time.
 2. THE Request_Queue SHALL expose a read-only `pending` property that returns the current number of waiting tasks (the existing `get pending()` accessor).
 3. THE App_Context SHALL provide a mechanism for TUI components to read the list of Active_Requests and the current Queue_Depth from the running Gateway_Server.
-4. WHEN the Gateway_Server is started via the Gateway_Panel, THE App_Context SHALL store references to the request activity state and the active Request_Queue instance.
+4. WHEN the Gateway_Server is started via the TUI_App, THE App_Context SHALL store references to the request activity state and the active Request_Queue instance.
 5. WHEN the Gateway_Server is stopped, THE App_Context SHALL clear the request activity state and Request_Queue reference, and THE Request_Tracker SHALL treat all values as empty or offline.
 
 ---
 
-### Requirement 6: Request Tracker Placement in TUI
+### Requirement 6: Request Tracker Placement in Info Panel
 
-**User Story:** As a developer, I want the server activity tracker to be visible from the Gateway Panel, so that I can monitor server health alongside gateway controls.
+**User Story:** As a developer, I want the server activity tracker to be visible from the Info Panel, so that I can monitor server health alongside connection details.
 
 #### Acceptance Criteria
 
-1. THE Request_Tracker SHALL be displayed within the Gateway_Panel below the gateway status and control section.
-2. WHILE the Gateway_Server is running, THE Request_Tracker SHALL be visible and actively updating.
-3. WHEN the Gateway_Server is not running, THE Request_Tracker SHALL display an offline state and not show stale request data.
-4. THE Request_Tracker SHALL display a scrollable list of Request_Entries, showing the most recent requests at the top.
-5. THE Request_Tracker SHALL retain up to 50 completed Request_Entries for review, removing the oldest entries when the limit is exceeded.
-6. THE Gateway_Panel SHALL maintain the existing keyboard shortcuts: [Enter] Start/Stop, [b/Esc] Back.
+1. THE Request_Tracker SHALL be displayed within the Info_Panel, positioned below the bordered box containing the Base URL and API Key and above the keyboard shortcuts section.
+2. THE Request_Tracker SHALL occupy the full horizontal width of the Info_Panel.
+3. WHILE the Gateway_Server is running, THE Request_Tracker SHALL be visible and actively updating.
+4. WHEN the Gateway_Server is not running, THE Request_Tracker SHALL display an offline state and not show stale request data.
+5. THE Request_Tracker SHALL have a fixed height that does not expand as new Request_Entries are added, to maintain a stable Info_Panel layout.
+6. WHEN the number of Request_Entries exceeds the visible area of the fixed-height Request_Tracker, THE Request_Tracker SHALL provide vertical scrolling so the user can scroll through all entries.
+7. THE Request_Tracker SHALL display a scrollable list of Request_Entries, showing the most recent requests at the top.
+8. THE Request_Tracker SHALL retain up to 50 completed Request_Entries for review, removing the oldest entries when the limit is exceeded.
+9. THE Info_Panel SHALL maintain the existing keyboard shortcuts: [c] Copy URL, [k] Copy Key, [b/Esc] Back.
 
+---
 
+### Requirement 7: Parent/Child Request Grouping
+
+**User Story:** As a developer, I want to see which internal sub-requests were spawned by a single incoming HTTP request, so that I can understand what processing happens inside each API call.
+
+#### Acceptance Criteria
+
+1. WHEN an incoming HTTP request to the Gateway_Server triggers one or more tasks enqueued in the Request_Queue, THE Request_Tracker SHALL group those Sub_Requests under the originating Parent_Request.
+2. THE Request_Tracker SHALL display Sub_Requests as indented children beneath the Parent_Request entry, visually distinguishing them from top-level requests.
+3. WHILE any Sub_Request of a Parent_Request is an Active_Request, THE Parent_Request entry SHALL display a Loading_Indicator to indicate ongoing processing.
+4. WHEN all Sub_Requests of a Parent_Request have completed, THE Parent_Request entry SHALL update its status to show the final HTTP status code and total Elapsed_Time.
+5. THE Response_Timer on the Parent_Request SHALL measure the total wall-clock time from when the Parent_Request was received until all Sub_Requests have completed and the response is sent.
+6. WHEN a Parent_Request has no Sub_Requests (e.g., a simple GET /health or GET /v1/models), THE Request_Tracker SHALL display the Parent_Request as a standalone Request_Entry with no grouping.
+7. IF any Sub_Request fails, THEN THE Parent_Request entry SHALL reflect the error status once all Sub_Requests have resolved.
