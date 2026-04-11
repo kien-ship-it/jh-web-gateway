@@ -90,7 +90,6 @@ The header shows the gateway status at all times. Use arrow keys to navigate and
 │  Main Menu                                                  │
 │                                                             │
 │  > Start Gateway                                            │
-│    Model                                                    │
 │    Chat                                                     │
 │    Server Info                                              │
 │    Settings                                                 │
@@ -170,38 +169,9 @@ Once all phases complete the gateway is live:
 
 ---
 
-### Model Selector
-
-Choose the AI model for all requests. The currently active model is marked with a filled circle (`●`).
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ jh-gateway                         ● Gateway: running       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Select Model                                               │
-│                                                             │
-│  > ● claude-opus-4.5          ← active model                │
-│    ○ claude-sonnet-4.5                                      │
-│    ○ claude-haiku-4.5                                       │
-│    ○ gpt-4.1                                                │
-│    ○ gpt-5                                                  │
-│    ○ gpt-5.1                                                │
-│    ○ o3                                                     │
-│    ○ o3-mini                                                │
-│    ○ llama3-3-70b-instruct                                  │
-│                                                             │
-│  [↑↓] Navigate  [Enter] Select  [b/Esc] Back                │
-└─────────────────────────────────────────────────────────────┘
-```
-
-The selection is saved to `~/.jh-gateway/config.json` as `defaultModel` immediately on press.
-
----
-
 ### Chat Panel
 
-Send a quick test message from inside the TUI — no external tool required. The panel shows the last exchange and streams a response from the running gateway.
+Send a quick test message from inside the TUI — no external tool required. The panel shows the last exchange and streams a response from the running gateway. Use `↑`/`↓` to cycle through models without leaving the chat.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -218,7 +188,7 @@ Send a quick test message from inside the TUI — no external tool required. The
 │ │  Type a message and press Enter… █                  │     │
 │ ╰─────────────────────────────────────────────────────╯     │
 │                                                             │
-│  [Enter] Send  [b/Esc] Back                                 │
+│  [Enter] Send  [↑↓] Model  [b/Esc] Back                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -228,6 +198,7 @@ Send a quick test message from inside the TUI — no external tool required. The
 |-----|--------|
 | Type | Compose your message |
 | `Enter` | Send the message |
+| `↑` / `↓` | Cycle through models |
 | `Backspace` | Delete last character |
 | `b` / `Esc` | Back to menu |
 
@@ -235,7 +206,7 @@ Send a quick test message from inside the TUI — no external tool required. The
 
 ### Server Info Panel
 
-Displays the live base URL and API key. Use one-key shortcuts to copy them directly to the clipboard.
+Displays the live base URL, API key, and real-time server activity. Use one-key shortcuts to copy connection details directly to the clipboard.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -248,6 +219,10 @@ Displays the live base URL and API key. Use one-key shortcuts to copy them direc
 │ │  Base URL:  http://127.0.0.1:8741                 │       │
 │ │  API Key:   jh-local-xxxxxxxxxxxxxxxxxxxxxxxx     │       │
 │ ╰───────────────────────────────────────────────────╯       │
+│                                                             │
+│  Activity                                                   │
+│  ● POST /v1/chat/completions  200  1.2s  claude-opus-4.5   │
+│  ● GET  /v1/models            200  0.1s                     │
 │                                                             │
 │  Copied URL!                                                │
 │                                                             │
@@ -304,7 +279,7 @@ Changes are validated and written to `~/.jh-gateway/config.json` on confirm.
 
 | Key | Context | Action |
 |-----|---------|--------|
-| `↑` / `↓` | Menu, Model, Settings | Navigate items |
+| `↑` / `↓` | Menu, Chat, Settings | Navigate items / cycle models |
 | `Enter` | Main Menu | Open selected panel |
 | `Enter` | Gateway Panel | Start / Stop gateway |
 | `Enter` | Chat | Send message |
