@@ -14,15 +14,10 @@ export const PANEL_SHORTCUTS: Record<PanelId, FooterShortcut[]> = {
     { key: "b", label: "Back" },
     { key: "q", label: "Quit" },
   ],
-  model: [
-    { key: "↑↓", label: "Navigate" },
-    { key: "Enter", label: "Select" },
-    { key: "b", label: "Back" },
-    { key: "q", label: "Quit" },
-  ],
   chat: [
     { key: "Enter", label: "Send" },
-    { key: "b", label: "Back" },
+    { key: "m", label: "Model" },
+    { key: "Esc", label: "Back" },
     { key: "q", label: "Quit" },
   ],
   info: [

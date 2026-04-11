@@ -1,6 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import { useAppContext } from "../AppContext.js";
+import { MODEL_ENDPOINT_MAP } from "../../infra/types.js";
+import { updateConfig } from "../../infra/config.js";
+import { wrapIndex } from "../utils/navigation.js";
+
+const MODELS = Object.keys(MODEL_ENDPOINT_MAP);
 
 interface ChatMessage {
   role: "user" | "assistant" | "error";
@@ -8,7 +13,7 @@ interface ChatMessage {
 }
 
 export function ChatPanel(): React.ReactElement {
-  const { state, navigate } = useAppContext();
+  const { state, navigate, setActiveModel } = useAppContext();
   const { gatewayStatus, config, activeModel } = state;
   const gatewayRunning = gatewayStatus === "running";
 
@@ -16,6 +21,29 @@ export function ChatPanel(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null);
   const [lastUserInput, setLastUserInput] = useState<string | null>(null);
+
+  // Inline model picker state
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [modelFocusIndex, setModelFocusIndex] = useState(() => {
+    const idx = MODELS.indexOf(activeModel);
+    return idx >= 0 ? idx : 0;
+  });
+  const [confirmationModel, setConfirmationModel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (confirmationModel !== null) {
+      const timer = setTimeout(() => setConfirmationModel(null), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmationModel]);
+
+  // Sync focus index when picker opens
+  useEffect(() => {
+    if (showModelPicker) {
+      const idx = MODELS.indexOf(activeModel);
+      setModelFocusIndex(idx >= 0 ? idx : 0);
+    }
+  }, [showModelPicker, activeModel]);
 
   const handleSubmit = async (value: string) => {
     if (!gatewayRunning) {
@@ -81,6 +109,25 @@ export function ChatPanel(): React.ReactElement {
   };
 
   useInput((_input, key) => {
+    // ── Model picker mode ──────────────────────────────────────────────────
+    if (showModelPicker) {
+      if (key.downArrow) {
+        setModelFocusIndex((i) => wrapIndex(i, 1, MODELS.length));
+      } else if (key.upArrow) {
+        setModelFocusIndex((i) => wrapIndex(i, -1, MODELS.length));
+      } else if (key.return) {
+        const selected = MODELS[modelFocusIndex];
+        updateConfig({ defaultModel: selected }).catch(() => { });
+        setActiveModel(selected);
+        setConfirmationModel(selected);
+        setShowModelPicker(false);
+      } else if (key.escape || _input === "m") {
+        setShowModelPicker(false);
+      }
+      return;
+    }
+
+    // ── Normal chat mode ───────────────────────────────────────────────────
     if (!gatewayRunning) {
       if (key.return) navigate("gateway");
       else if (_input === "b" || key.escape) navigate("menu");
@@ -89,6 +136,12 @@ export function ChatPanel(): React.ReactElement {
 
     if (key.escape) {
       if (!loading) navigate("menu");
+      return;
+    }
+
+    // Toggle model picker with 'm' when not typing
+    if (_input === "m" && input.length === 0 && !loading) {
+      setShowModelPicker(true);
       return;
     }
 
@@ -127,46 +180,84 @@ export function ChatPanel(): React.ReactElement {
 
   return (
     <Box flexDirection="column" padding={1}>
+      {/* Header with model indicator */}
       <Box marginBottom={1}>
         <Text bold>Chat</Text>
-        <Text dimColor>  Model: {activeModel}</Text>
+        <Text dimColor>  Model: </Text>
+        <Text color="green">{activeModel}</Text>
+        {confirmationModel !== null && (
+          <Text color="green">  ✓ Switched!</Text>
+        )}
+        {!showModelPicker && (
+          <Text dimColor>  [m] change</Text>
+        )}
       </Box>
+
+      {/* Inline model picker overlay */}
+      {showModelPicker && (
+        <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} marginBottom={1}>
+          <Box marginBottom={1}>
+            <Text bold color="cyan">Select Model</Text>
+            <Text dimColor>  [↑↓] Navigate  [Enter] Select  [Esc] Cancel</Text>
+          </Box>
+          {MODELS.map((model, index) => {
+            const isFocused = index === modelFocusIndex;
+            const isActive = model === activeModel;
+            return (
+              <Box key={model}>
+                <Text color={isFocused ? "cyan" : undefined} bold={isFocused}>
+                  {isFocused ? "> " : "  "}
+                  <Text color={isActive ? "green" : "gray"}>{isActive ? "●" : "○"}</Text>
+                  {" "}
+                  {model}
+                </Text>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
 
       {/* Response area */}
-      <Box flexDirection="column" marginBottom={1} minHeight={6}>
-        {lastUserInput && (
-          <Box marginBottom={1}>
-            <Text color="cyan">You: {lastUserInput}</Text>
-          </Box>
-        )}
-        {loading && (
-          <Box>
-            <Text color="yellow">Thinking…</Text>
-          </Box>
-        )}
-        {!loading && lastMessage?.role === "assistant" && (
-          <Box>
-            <Text color="green">Assistant: {lastMessage.content}</Text>
-          </Box>
-        )}
-        {!loading && lastMessage?.role === "error" && (
-          <Box>
-            <Text color="red">{lastMessage.content}</Text>
-          </Box>
-        )}
-      </Box>
+      {!showModelPicker && (
+        <Box flexDirection="column" marginBottom={1} minHeight={6}>
+          {lastUserInput && (
+            <Box marginBottom={1}>
+              <Text color="cyan">You: {lastUserInput}</Text>
+            </Box>
+          )}
+          {loading && (
+            <Box>
+              <Text color="yellow">Thinking…</Text>
+            </Box>
+          )}
+          {!loading && lastMessage?.role === "assistant" && (
+            <Box>
+              <Text color="green">Assistant: {lastMessage.content}</Text>
+            </Box>
+          )}
+          {!loading && lastMessage?.role === "error" && (
+            <Box>
+              <Text color="red">{lastMessage.content}</Text>
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* Input area */}
-      <Box borderStyle="round" borderColor="gray" paddingX={1}>
-        <Text>
-          {input.length > 0 ? input : <Text dimColor>Type a message and press Enter…</Text>}
-          <Text color="cyan">█</Text>
-        </Text>
-      </Box>
+      {!showModelPicker && (
+        <>
+          <Box borderStyle="round" borderColor="gray" paddingX={1}>
+            <Text>
+              {input.length > 0 ? input : <Text dimColor>Type a message and press Enter…</Text>}
+              <Text color="cyan">█</Text>
+            </Text>
+          </Box>
 
-      <Box marginTop={1}>
-        <Text dimColor>[Enter] Send  [b/Esc] Back</Text>
-      </Box>
+          <Box marginTop={1}>
+            <Text dimColor>[Enter] Send  [m] Model  [Esc] Back</Text>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

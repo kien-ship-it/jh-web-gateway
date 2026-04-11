@@ -8,7 +8,6 @@ import { PANEL_SHORTCUTS } from "./utils/shortcuts.js";
 import { SplashScreen } from "./panels/SplashScreen.js";
 import { MainMenu } from "./panels/MainMenu.js";
 import { GatewayPanel } from "./panels/GatewayPanel.js";
-import { ModelSelector } from "./panels/ModelSelector.js";
 import { ChatPanel } from "./panels/ChatPanel.js";
 import { InfoPanel } from "./panels/InfoPanel.js";
 import { SettingsPanel } from "./panels/SettingsPanel.js";
@@ -23,8 +22,8 @@ interface AppProps {
 // ── Inner component (inside AppProvider) ──────────────────────────────────────
 
 function AppContent({ onRegisterShutdown }: AppProps): React.ReactElement {
-  const { state, navigate, setActiveModel } = useAppContext();
-  const { currentPanel, gatewayStatus, activeModel } = state;
+  const { state, navigate } = useAppContext();
+  const { currentPanel, gatewayStatus } = state;
 
   const [showQuit, setShowQuit] = useState(false);
 
@@ -45,7 +44,7 @@ function AppContent({ onRegisterShutdown }: AppProps): React.ReactElement {
         }
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Global q handler — active only when the quit dialog is not already showing
@@ -69,14 +68,6 @@ function AppContent({ onRegisterShutdown }: AppProps): React.ReactElement {
         return <MainMenu onQuit={() => setShowQuit(true)} />;
       case "gateway":
         return <GatewayPanel />;
-      case "model":
-        return (
-          <ModelSelector
-            activeModel={activeModel}
-            onSelect={(model) => setActiveModel(model)}
-            onBack={() => navigate("menu")}
-          />
-        );
       case "chat":
         return <ChatPanel />;
       case "info":
