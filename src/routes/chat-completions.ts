@@ -138,12 +138,18 @@ export function chatCompletionsRouter(
     const stats = pool.stats;
     console.log(`[chat] Acquired page (pool: ${stats.busy}/${stats.total} busy)`);
 
+    // Combine systemPrompt + prompt so tool definitions and system messages
+    // reach the model (JH API only has a single `text` field).
+    const fullPrompt = built.systemPrompt
+      ? `${built.systemPrompt}\n\n${built.prompt}`
+      : built.prompt;
+
     try {
       // Enqueue and execute via browser client
       const response = await queue.enqueue(() =>
         sendChatRequest(page, credentials, {
           model,
-          prompt: built.prompt,
+          prompt: fullPrompt,
         }),
       );
 
@@ -209,7 +215,7 @@ export function chatCompletionsRouter(
             const retryResponse = await retry.queue.enqueue(() =>
               sendChatRequest(retry.page, freshCreds, {
                 model: model as string,
-                prompt: built.prompt,
+                prompt: fullPrompt,
               }),
             );
 

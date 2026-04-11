@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import type { OpenAIChunk, OpenAICompletion } from "../infra/types.js";
-import { parseToolsAndThinking, toOpenAIToolCalls } from "./tool-parser.js";
+import type { OpenAIChunk, OpenAICompletion, ToolCallDelta } from "../infra/types.js";
+import { parseToolsAndThinking, toOpenAIToolCalls, StreamingToolBuffer } from "./tool-parser.js";
 
 // ── SSE Parsing ───────────────────────────────────────────────────────────────
 
@@ -165,6 +165,8 @@ export function extractContentFromJhSse(rawSse: string): string {
 /**
  * Parse JH SSE text and return OpenAI SSE chunks.
  * Skips user echoes and metadata events.
+ * Uses StreamingToolBuffer to detect <tool_call> XML and emit proper
+ * tool_calls delta objects instead of leaking raw XML as content.
  */
 export function translateToStream(
   rawSse: string,
@@ -176,6 +178,9 @@ export function translateToStream(
   const events = parseSseEvents(rawSse);
   const chunks: OpenAIChunk[] = [];
   let lastMessageText = "";
+  const toolBuf = new StreamingToolBuffer();
+  let toolCallIndex = 0;
+  let hasToolCalls = false;
 
   // First chunk: role announcement
   chunks.push({
@@ -188,6 +193,43 @@ export function translateToStream(
 
   let gotDeltas = false;
 
+  /** Push a raw text fragment through the tool buffer and emit chunks. */
+  function processDelta(rawDelta: string): void {
+    const { text, completedCalls } = toolBuf.push(rawDelta);
+
+    // Emit safe text (outside any tool_call tag) as content
+    if (text) {
+      chunks.push({
+        id,
+        object: "chat.completion.chunk",
+        created,
+        model,
+        choices: [{ index: 0, delta: { content: text }, finish_reason: null }],
+      });
+    }
+
+    // Emit completed tool calls as proper tool_calls deltas
+    for (const call of completedCalls) {
+      hasToolCalls = true;
+      const toolDelta: ToolCallDelta = {
+        index: toolCallIndex++,
+        id: call.id,
+        type: "function",
+        function: {
+          name: call.name,
+          arguments: call.arguments,
+        },
+      };
+      chunks.push({
+        id,
+        object: "chat.completion.chunk",
+        created,
+        model,
+        choices: [{ index: 0, delta: { tool_calls: [toolDelta] }, finish_reason: null }],
+      });
+    }
+  }
+
   for (const ev of events) {
     const { type, parsed } = resolveEventType(ev);
     if (isUserEcho(parsed)) continue;
@@ -197,13 +239,7 @@ export function translateToStream(
       const delta = extractDeltaText(parsed);
       if (delta !== null) {
         gotDeltas = true;
-        chunks.push({
-          id,
-          object: "chat.completion.chunk",
-          created,
-          model,
-          choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
-        });
+        processDelta(delta);
       }
     }
 
@@ -214,25 +250,31 @@ export function translateToStream(
         const delta = msgText.slice(lastMessageText.length);
         lastMessageText = msgText;
         if (!gotDeltas && delta) {
-          chunks.push({
-            id,
-            object: "chat.completion.chunk",
-            created,
-            model,
-            choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
-          });
+          processDelta(delta);
         }
       }
     }
   }
 
-  // Final chunk: finish_reason stop
+  // Flush any remaining buffered content (partial/malformed tags become text)
+  const flushed = toolBuf.flush();
+  if (flushed) {
+    chunks.push({
+      id,
+      object: "chat.completion.chunk",
+      created,
+      model,
+      choices: [{ index: 0, delta: { content: flushed }, finish_reason: null }],
+    });
+  }
+
+  // Final chunk: finish_reason "tool_calls" if any tool calls were emitted, else "stop"
   chunks.push({
     id,
     object: "chat.completion.chunk",
     created,
     model,
-    choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    choices: [{ index: 0, delta: {}, finish_reason: hasToolCalls ? "tool_calls" : "stop" }],
   });
 
   return chunks;
@@ -271,7 +313,7 @@ export function translateToCompletion(
     object: "chat.completion",
     created,
     model,
-    choices: [{ index: 0, message, finish_reason: "stop" }],
+    choices: [{ index: 0, message, finish_reason: parsed.toolCalls.length > 0 ? "tool_calls" : "stop" }],
     usage: {
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
