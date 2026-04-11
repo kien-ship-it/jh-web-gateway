@@ -66,7 +66,7 @@ export function createServer(config: GatewayConfig, deps?: ServerDeps): Hono {
 
   // Mount routes
   app.route("/v1/models", modelsRouter(config));
-  app.route("/health", healthRouter(config, startTime));
+  app.route("/health", healthRouter(config, startTime, deps ? { getCredentials: deps.getCredentials } : undefined));
 
   if (deps) {
     app.route(
@@ -168,16 +168,6 @@ export async function startServer(
 
     console.log("Shutdown complete.");
   };
-
-  // Register signal handlers
-  process.on("SIGINT", async () => {
-    await shutdown();
-    process.exit(0);
-  });
-  process.on("SIGTERM", async () => {
-    await shutdown();
-    process.exit(0);
-  });
 
   return { close: shutdown };
 }

@@ -107,6 +107,6 @@ export async function findOrOpenJhPage(browser: Browser): Promise<Page> {
   const context =
     contexts.length > 0 ? contexts[0] : await browser.newContext();
   const page = await context.newPage();
-  await page.goto(JH_URL);
+  await page.goto(JH_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
   return page;
 }

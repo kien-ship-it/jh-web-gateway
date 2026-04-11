@@ -25,10 +25,10 @@ export class RequestQueue {
       return await task();
     } finally {
       // Adaptive cooldown: only delay if there are queued requests waiting.
-      // The JH platform needs a brief pause between generations, but 1500ms
-      // was overly conservative. 300ms is enough for cleanup.
+      // The JH platform needs a brief pause between generations; 100ms is
+      // enough for cleanup while keeping throughput high.
       if (this.queue.length > 0) {
-        await new Promise((r) => setTimeout(r, 300));
+        await new Promise((r) => setTimeout(r, 100));
       }
       this.release();
     }

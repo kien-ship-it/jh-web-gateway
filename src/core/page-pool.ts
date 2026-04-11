@@ -21,6 +21,7 @@ export class PagePool {
     private initPromise: Promise<void> | null = null;
     private pagesCreating = 0;
     private warmedUp = false;
+    private disconnected = false;
 
     constructor(options: {
         targetUrl?: string;
@@ -42,6 +43,13 @@ export class PagePool {
 
     private async _doInit(browser: Browser, seedPage: Page): Promise<void> {
         this.browser = browser;
+        this.disconnected = false;
+
+        // Detect CDP disconnection so we stop handing out dead pages
+        browser.on("disconnected", () => {
+            console.warn("[PagePool] Browser disconnected — all pages are now invalid");
+            this.disconnected = true;
+        });
 
         // Add the seed page as the first pooled page
         this.pages.push({
@@ -73,6 +81,16 @@ export class PagePool {
      * Call `markWarmedUp()` after the first successful request to enable scaling.
      */
     async acquire(): Promise<{ page: Page; queue: RequestQueue; release: () => void }> {
+        if (this.disconnected) {
+            throw Object.assign(
+                new Error("Browser has disconnected. Restart the gateway to reconnect."),
+                { statusCode: 503 },
+            );
+        }
+
+        // Evict dead/navigated-away pages before selecting
+        this.evictDeadPages();
+
         // First, try to find an available (non-busy) page
         let pooled = this.pages.find(p => !p.inUse);
 
@@ -90,6 +108,12 @@ export class PagePool {
 
         // If still no page available, pick the one with the smallest queue
         if (!pooled) {
+            if (this.pages.length === 0) {
+                throw Object.assign(
+                    new Error("No healthy browser pages available. Restart the gateway."),
+                    { statusCode: 503 },
+                );
+            }
             pooled = this.pages.reduce((a, b) =>
                 a.queue.pending <= b.queue.pending ? a : b
             );
@@ -107,6 +131,10 @@ export class PagePool {
                 if (!this.warmedUp) {
                     this.warmedUp = true;
                     console.log(`[PagePool] Warm-up complete — page scaling enabled (max ${this.maxPages})`);
+                    // Pre-warm a second page in the background if maxPages > 1
+                    if (this.maxPages > 1 && this.pages.length < this.maxPages && this.browser) {
+                        this.preWarmPage();
+                    }
                 }
             },
         };
@@ -136,7 +164,7 @@ export class PagePool {
 
         try {
             // Navigate to the target URL
-            await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30_000 });
+            await page.goto(this.targetUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
 
             // Verify we actually landed on the target domain and weren't redirected
             // to a login/auth page (goto() follows redirects silently).
@@ -164,6 +192,41 @@ export class PagePool {
             await page.close().catch(() => {});
             throw err;
         }
+    }
+
+    /** Evict pages that have crashed or navigated away from JH */
+    private evictDeadPages(): void {
+        const before = this.pages.length;
+        this.pages = this.pages.filter((p) => {
+            try {
+                // page.isClosed() is synchronous and safe
+                if (p.page.isClosed()) return false;
+                // Check the page is still on JH domain
+                const url = p.page.url();
+                if (!url.includes("chat.ai.jh.edu")) {
+                    console.warn(`[PagePool] Evicting page — navigated away: ${url}`);
+                    p.page.close().catch(() => {});
+                    return false;
+                }
+                return true;
+            } catch {
+                // page reference is dead
+                return false;
+            }
+        });
+        const evicted = before - this.pages.length;
+        if (evicted > 0) {
+            console.warn(`[PagePool] Evicted ${evicted} dead/stale page(s)`);
+        }
+    }
+
+    /** Pre-warm a new page in the background (fire-and-forget) */
+    private preWarmPage(): void {
+        this.pagesCreating++;
+        this.createPage()
+            .then(() => console.log("[PagePool] Pre-warmed a new page"))
+            .catch((err) => console.warn(`[PagePool] Pre-warm failed: ${(err as Error).message}`))
+            .finally(() => { this.pagesCreating--; });
     }
 
     /** Close all pages except the seed page */

@@ -204,6 +204,9 @@ async function sendChatRequestInner(
 
   await page.route(streamPattern, routeHandler);
 
+  let result!: Result;
+
+  try {
   // POST to start the chat
   const postResult = await page.evaluate(
     async ({
@@ -268,14 +271,10 @@ async function sendChatRequestInner(
     },
   );
 
-  let result: Result;
-
   if (postResult.error) {
     result = { error: true, status: postResult.status, statusText: postResult.statusText ?? "", body: postResult.body };
-    await page.unroute(streamPattern, routeHandler);
   } else if (postResult.contentType.includes("text/event-stream")) {
     result = { error: false, status: 200, statusText: "OK", body: postResult.body };
-    await page.unroute(streamPattern, routeHandler);
   } else {
     // POST returned JSON with streamId — the page's JS will GET the stream,
     // and our route handler will intercept it with retry logic.
@@ -287,7 +286,6 @@ async function sendChatRequestInner(
 
     if (!streamId) {
       result = { error: false, status: 200, statusText: "OK", body: postResult.body };
-      await page.unroute(streamPattern, routeHandler);
     } else {
       // Fire our own GET as fallback (the route handler intercepts it too)
       const streamUrl = `${JH_API_BASE}/agents/chat/stream/${streamId}`;
@@ -315,8 +313,12 @@ async function sendChatRequestInner(
       );
 
       result = await Promise.race([ssePromise, timeout]);
-      await page.unroute(streamPattern, routeHandler);
     }
+  }
+
+  } finally {
+    // Always clean up the route handler to prevent leaked interceptors on pooled pages
+    await page.unroute(streamPattern, routeHandler).catch(() => {});
   }
 
   if (result.error) {
@@ -326,7 +328,7 @@ async function sendChatRequestInner(
     if (status === 401 && !isRetry) {
       const cdpUrl = options?.cdpUrl ?? "http://127.0.0.1:9222";
       try {
-        await page.reload({ waitUntil: "networkidle" });
+        await page.reload({ waitUntil: "commit" });
         const fresh = await captureCredentials(cdpUrl, 30_000);
         const newCreds: GatewayCredentials = {
           bearerToken: fresh.bearerToken,
